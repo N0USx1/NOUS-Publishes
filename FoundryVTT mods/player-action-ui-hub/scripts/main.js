@@ -537,15 +537,23 @@ function resolveActor() {
 __name(resolveActor, "resolveActor");
 
 // src/collector.ts
+function isStrike(action) {
+  return action?.type === "strike";
+}
+__name(isStrike, "isStrike");
+function strikesOf(actor) {
+  const actions = actor?.system?.actions;
+  if (!Array.isArray(actions)) return [];
+  return actions.filter(isStrike);
+}
+__name(strikesOf, "strikesOf");
 function strikeSectorId(strike, index) {
   return `strike:${strike?.item?.id ?? strike?.slug ?? index}`;
 }
 __name(strikeSectorId, "strikeSectorId");
 function collectStrikes(actor) {
   try {
-    const actions = actor?.system?.actions;
-    if (!Array.isArray(actions)) return [];
-    return actions.filter((a) => a?.type === "strike").map((strike, i) => {
+    return strikesOf(actor).map((strike, i) => {
       const ready = strike.ready !== false;
       const drawAux = (strike.auxiliaryActions ?? [])[0];
       return {
@@ -573,17 +581,14 @@ __name(collectStrikes, "collectStrikes");
 
 // src/executor.ts
 function findStrike(actor, strikeId) {
-  const actions = actor?.system?.actions;
-  if (!Array.isArray(actions)) return null;
-  const strikes = actions.filter((a) => a?.type === "strike");
-  return strikes.find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
+  return strikesOf(actor).find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
 }
 __name(findStrike, "findStrike");
 function intentEvent(realEvent) {
   const skipDefault = !game.user?.settings?.showCheckDialogs;
   const userWantsDialog = !!realEvent?.shiftKey;
   const shiftKey = userWantsDialog ? skipDefault : !skipDefault;
-  return new MouseEvent("click", { shiftKey, ctrlKey: false, metaKey: false });
+  return new PointerEvent("click", { shiftKey, ctrlKey: false, metaKey: false });
 }
 __name(intentEvent, "intentEvent");
 async function rollStrike(actor, strikeId, map, event) {

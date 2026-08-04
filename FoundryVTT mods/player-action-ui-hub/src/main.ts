@@ -1,3 +1,4 @@
+import type { ActorPF2e, ItemPF2e } from "foundry-pf2e";
 import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
 import { collectStrikes } from "./collector";
@@ -21,10 +22,10 @@ document.addEventListener("mousemove", (ev) => {
  * 当前是第几轮；不在战斗中返回 null。
  * ★ 战斗外没有"回合"这回事，动作经济那一行就不该画（画了是假信息）。
  */
-function currentRound(actor: any): number | null {
+function currentRound(actor: ActorPF2e | null): number | null {
     const combat = game.combat;
     if (!combat?.started) return null;
-    const inIt = combat.combatants?.some((c: any) => c.actor?.id === actor?.id);
+    const inIt = combat.combatants?.some((c) => c.actor?.id === actor?.id);
     return inIt ? (combat.round ?? null) : null;
 }
 
@@ -35,7 +36,7 @@ let openWheel: WheelApp | null = null;
  * ⚠ 别在钩子里改用 `resolveActor()` 现算：轮盘开着的时候玩家可能已经改选了别的
  *   token，那时现算出来的不是盘面对应的角色，会拿别人的变更去刷新我们的盘。
  */
-let openWheelActor: any = null;
+let openWheelActor: ActorPF2e | null = null;
 
 /**
  * 由 actor 现算一层"打击"盘面；这个角色没有打击时返回 null。
@@ -44,7 +45,7 @@ let openWheelActor: any = null;
  *   之后每次角色数据变化（拔刀/收刀）再算一次。两处必须同一份逻辑，
  *   否则刷新出来的盘面会和刚进来时长得不一样。
  */
-function buildStrikeLevel(actor: any): WheelLevel | null {
+function buildStrikeLevel(actor: ActorPF2e): WheelLevel | null {
     const strikes = collectStrikes(actor);
     if (!strikes.length) return null;
     // 翻选条的"默认文字"取本层第一个条目的；悬停到别的武器时
@@ -143,7 +144,11 @@ Hooks.once("init", () => {
     game.keybindings.register(MODULE_ID, "openWheel", {
         name: "Summon Action Wheel",
         hint: "Opens the wheel at the cursor. Equivalent to Ctrl+left-click; rebind this if Ctrl+click is awkward on your setup.",
-        editable: [{ key: "KeyR" }],
+        // modifiers 显式给空数组：省略它在运行时等价
+        // （client/helpers/interaction/client-keybindings.mjs:261
+        //   `binding.modifiers = this.#validateModifiers(binding.modifiers ?? [])`），
+        // 但类型包把它标成必填，写全比开豁免干净。
+        editable: [{ key: "KeyR", modifiers: [] }],
         onDown: () => {
             // ⚠ 不用 `window.event`（遗留 API，不可靠）：坐标取自模块顶层
             //   持续记录的 lastMouse。
@@ -213,7 +218,7 @@ Hooks.once("ready", () => {
     // 不如都听——WheelApp.refresh() 自带合并，重复触发只会重画一次。
     const REFRESH_HOOKS = ["updateActor", "updateItem", "createItem", "deleteItem"];
     for (const h of REFRESH_HOOKS) {
-        Hooks.on(h, (doc: any) => {
+        Hooks.on(h, (doc: ActorPF2e | ItemPF2e) => {
             if (!openWheel?.rendered || !openWheelActor) return;
             // updateActor 给的就是 Actor；物品钩子给的是 Item，从它身上找宿主
             const changed = doc?.documentName === "Actor" ? doc : (doc?.actor ?? doc?.parent);

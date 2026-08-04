@@ -12,7 +12,13 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "types": []
+    // Foundry 与 pf2e 的全局类型（game / canvas / ui / Hooks / foundry / CONFIG …）。
+    // 取代 Task 1 留下的 src/globals.d.ts —— 那份把一切声明成 any，
+    // 等于类型闸对所有 Foundry / pf2e 调用零覆盖。
+    // ⚠ 上游只有 v13 分支而我们跑在 v14 上，个别 API 会被它误报成不存在；
+    //   凡是这种地方都在 Foundry / pf2e 源码里核对过、就地写了注释与最小豁免。
+    //   **不许**为了让它变绿关 strict 或整文件 any —— 那等于把闸拆了。
+    "types": ["foundry-pf2e"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

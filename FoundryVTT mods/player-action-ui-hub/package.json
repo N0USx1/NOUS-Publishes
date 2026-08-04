@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
+    "foundry-pf2e": "github:7H3LaughingMan/foundry-pf2e#v13",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }

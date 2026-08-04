@@ -1,16 +1,15 @@
-import { strikeSectorId } from "./collector";
+import type { ActorPF2e } from "foundry-pf2e";
+import { strikeSectorId, strikesOf, type WheelStrike } from "./collector";
 
 /**
  * 按扇区 id 回查 strike 对象。
  *
  * ⚠ 必须**先过滤出 strike 再取下标**，与 collector 的 `.filter().map()` 顺序一致；
  *   直接在 system.actions 上枚举会让退化分支的下标对不上。
+ *   ——所以直接复用 collector 的 `strikesOf`，两边永远是同一份过滤。
  */
-function findStrike(actor: any, strikeId: string): any | null {
-    const actions = actor?.system?.actions;
-    if (!Array.isArray(actions)) return null;
-    const strikes = actions.filter((a: any) => a?.type === "strike");
-    return strikes.find((s: any, i: number) => strikeSectorId(s, i) === strikeId) ?? null;
+function findStrike(actor: ActorPF2e | null | undefined, strikeId: string): WheelStrike | null {
+    return strikesOf(actor).find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
 }
 
 /**
@@ -28,19 +27,24 @@ function findStrike(actor: any, strikeId: string): any | null {
  * 3. **仍要留给玩家反悔的口子**：按住 Shift 点 → 照常弹框，可临时加环境加值。
  *    这沿用 pf2e 自己"Shift 反转"的既有习惯，不另发明。
  *
- * 实现上造一个真的 `MouseEvent`：`isRelevantEvent`（helpers.ts:135）只鸭子类型地检查
+ * 实现上造一个真的 `PointerEvent`：`isRelevantEvent`（helpers.ts:135）只鸭子类型地检查
  * 有没有 ctrlKey/metaKey/shiftKey 三个键，但用真事件最稳。
+ *
+ * ★ 2026-08-05（Task 9）由 `MouseEvent` 改成 `PointerEvent`：pf2e 的 `RollParameters.event`
+ *   标的就是 `PointerEvent`（`system/rolls.ts` / 类型包 `system/rolls.d.ts:21`），
+ *   而 `MouseEvent` 是它的父类、不可赋值。原来靠 globals 全 any 才没被发现。
+ *   `PointerEvent` 是 `MouseEvent` 的子类，鸭子检查照样通过，运行时行为不变。
  *
  * ⚠ 掩护不受影响：Toolbelt 的 auto-cover 读的是检定上下文里的 `context.target`
  *   （其 tool.ts:307），来源是 `game.user.targets`，与事件对象无关。
  */
-function intentEvent(realEvent: Event | null): MouseEvent {
-    const skipDefault = !(game as any).user?.settings?.showCheckDialogs;
+function intentEvent(realEvent: Event | null): PointerEvent {
+    const skipDefault = !game.user?.settings?.showCheckDialogs;
     const userWantsDialog = !!(realEvent as MouseEvent | null)?.shiftKey;
     // skipDialog = shiftKey ? !skipDefault : skipDefault（helpers.ts:144）
     // 我们要的：默认 skipDialog=true；按住 Shift 则 false。反解出 shiftKey：
     const shiftKey = userWantsDialog ? skipDefault : !skipDefault;
-    return new MouseEvent("click", { shiftKey, ctrlKey: false, metaKey: false });
+    return new PointerEvent("click", { shiftKey, ctrlKey: false, metaKey: false });
 }
 
 /**
@@ -48,7 +52,7 @@ function intentEvent(realEvent: Event | null): MouseEvent {
  * 只调 pf2e 系统自己的函数，规则计算一概不自己做。
  */
 export async function rollStrike(
-    actor: any,
+    actor: ActorPF2e | null,
     strikeId: string,
     map: number,
     event: Event,
@@ -79,7 +83,7 @@ export async function rollStrike(
  * （findings-v0.1 §2）。
  */
 export async function execAuxiliary(
-    actor: any,
+    actor: ActorPF2e | null,
     strikeId: string,
     auxIndex: number,
 ): Promise<void> {
