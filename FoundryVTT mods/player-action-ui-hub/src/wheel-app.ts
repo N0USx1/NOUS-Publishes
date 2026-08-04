@@ -4,15 +4,17 @@ import { wrapText } from "./text";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const R_OUTER = 90;
-const R_INNER = 55;
+// 中心毂半径。★ 2026-08-05 由 55 缩到 42（Nous）：毂太大挤得外圈太窄，
+// "Unarmed Attack" 这种长名字会溢出扇区。缩毂 = 给扇区让出宽度。
+const R_INNER = 42;
 const CX = 100;
 const CY = 100;
 const SIZE = 320;   // 窗口边长（像素）
 
 const AppV2 = foundry.applications.api.ApplicationV2;
 
-/** 中心毂一行能放几个"全宽字"。毂半径 55、字号 5.5，留边后约 15。 */
-const HUB_CHARS_PER_LINE = 15;
+/** 中心毂一行能放几个"全宽字"。毂半径 42、字号 5.2，留边后约 12。 */
+const HUB_CHARS_PER_LINE = 12;
 
 /** 把 v 夹在 [lo, hi] 内。窗口比轮盘还小时以 lo 为准（hi 会小于 lo）。 */
 function clamp(v: number, lo: number, hi: number): number {

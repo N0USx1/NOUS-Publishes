@@ -14,6 +14,36 @@ function findStrike(actor: any, strikeId: string): any | null {
 }
 
 /**
+ * 把玩家在轮盘上的这一次点击，翻译成 pf2e 掷骰要的"意图事件"。
+ *
+ * 为什么不直接把原始点击事件递过去（源码实读 2026-08-05）：
+ *
+ * 1. **Ctrl 是我们的呼出键，但 pf2e 拿它当"暗骰"开关。**
+ *    `sheet/helpers.ts:145` —— `if (event.ctrlKey || event.metaKey) messageMode = "gm"|"blind"`。
+ *    玩家 Ctrl+点呼出轮盘后不松手直接点扇区，**每一次攻击都会变成暗骰**，
+ *    而且不报错、无提示。必须把 ctrl/meta 抹掉。
+ * 2. **默认要跳过加值确认框。** 轮盘存在的意义就是省掉多余那一步
+ *    （§0 根理：把负担从人脑挪走）；确认框里的加值本来就由 pf2e 自动算好，
+ *    诸如鼓舞类光环 buff 无论开不开框都已经在加值栈里。
+ * 3. **仍要留给玩家反悔的口子**：按住 Shift 点 → 照常弹框，可临时加环境加值。
+ *    这沿用 pf2e 自己"Shift 反转"的既有习惯，不另发明。
+ *
+ * 实现上造一个真的 `MouseEvent`：`isRelevantEvent`（helpers.ts:135）只鸭子类型地检查
+ * 有没有 ctrlKey/metaKey/shiftKey 三个键，但用真事件最稳。
+ *
+ * ⚠ 掩护不受影响：Toolbelt 的 auto-cover 读的是检定上下文里的 `context.target`
+ *   （其 tool.ts:307），来源是 `game.user.targets`，与事件对象无关。
+ */
+function intentEvent(realEvent: Event | null): MouseEvent {
+    const skipDefault = !(game as any).user?.settings?.showCheckDialogs;
+    const userWantsDialog = !!(realEvent as MouseEvent | null)?.shiftKey;
+    // skipDialog = shiftKey ? !skipDefault : skipDefault（helpers.ts:144）
+    // 我们要的：默认 skipDialog=true；按住 Shift 则 false。反解出 shiftKey：
+    const shiftKey = userWantsDialog ? skipDefault : !skipDefault;
+    return new MouseEvent("click", { shiftKey, ctrlKey: false, metaKey: false });
+}
+
+/**
  * 执行一次打击。`map` 为 0/1/2，对应第 1/2/3 击。
  * 只调 pf2e 系统自己的函数，规则计算一概不自己做。
  */
@@ -34,10 +64,9 @@ export async function rollStrike(
             ui.notifications.warn("That strike has no such attack in the sequence.");
             return;
         }
-        // ★ 硬约束（设计定档 §6.3）：**必须**把 event 传下去。
-        //   PF2e Toolbelt 的自动掩护靠检定上下文里的 target 判断，
-        //   缺了会**静默不生效**——不报错、不留痕，出了问题极难查。
-        await variant.roll({ event });
+        // 传的是"意图事件"而非原始点击，理由见 intentEvent 的注释：
+        // 默认跳过加值框、且不让呼出用的 Ctrl 把这一击变成暗骰。
+        await variant.roll({ event: intentEvent(event) });
     } catch (err) {
         console.error("player-action-ui-hub | rollStrike 失败", err);
         ui.notifications.error("The roll failed — see the console for details.");

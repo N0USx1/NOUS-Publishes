@@ -77,12 +77,12 @@ __name(wrapText, "wrapText");
 // src/wheel-app.ts
 var SVG_NS = "http://www.w3.org/2000/svg";
 var R_OUTER = 90;
-var R_INNER = 55;
+var R_INNER = 42;
 var CX = 100;
 var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
-var HUB_CHARS_PER_LINE = 15;
+var HUB_CHARS_PER_LINE = 12;
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
@@ -302,6 +302,13 @@ function findStrike(actor, strikeId) {
   return strikes.find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
 }
 __name(findStrike, "findStrike");
+function intentEvent(realEvent) {
+  const skipDefault = !game.user?.settings?.showCheckDialogs;
+  const userWantsDialog = !!realEvent?.shiftKey;
+  const shiftKey = userWantsDialog ? skipDefault : !skipDefault;
+  return new MouseEvent("click", { shiftKey, ctrlKey: false, metaKey: false });
+}
+__name(intentEvent, "intentEvent");
 async function rollStrike(actor, strikeId, map, event) {
   try {
     const strike = findStrike(actor, strikeId);
@@ -314,7 +321,7 @@ async function rollStrike(actor, strikeId, map, event) {
       ui.notifications.warn("That strike has no such attack in the sequence.");
       return;
     }
-    await variant.roll({ event });
+    await variant.roll({ event: intentEvent(event) });
   } catch (err) {
     console.error("player-action-ui-hub | rollStrike \u5931\u8D25", err);
     ui.notifications.error("The roll failed \u2014 see the console for details.");
