@@ -31,6 +31,12 @@ const CAPSULE_SPAN = GAP_ANGLE - 0.16;
 const CAPSULE_R_INNER = 60;
 const CAPSULE_R_OUTER = 84;
 
+/**
+ * 多久没动就自动收起（毫秒）。Nous 2026-08-05：晾着不动会挡视野。
+ * 任何交互都会重新计时；执行动作后本来就会关，所以这条只对"呼出了又不用"生效。
+ */
+const IDLE_DISMISS_MS = 5000;
+
 /** 把 v 夹在 [lo, hi] 内。窗口比轮盘还小时以 lo 为准（hi 会小于 lo）。 */
 function clamp(v: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(v, hi));
@@ -85,6 +91,9 @@ export class WheelApp extends AppV2 {
 
     /** 点了撤回时调用，由外部注入（真正的记账退还在外面做）。 */
     onUndo?: () => void;
+
+    /** 无操作自动收起的计时器 */
+    #idleTimer?: ReturnType<typeof setTimeout>;
 
     /** 换一层内容并重绘（钻取与双向绑定都走这里） */
     async setLevel(level: WheelLevel): Promise<void> {
@@ -320,9 +329,24 @@ export class WheelApp extends AppV2 {
         content.replaceChildren(result);
         content.addEventListener("click", this.#onClick);
         content.addEventListener("mouseover", this.#onHover);
+        // 重绘会换掉内容，所以监听每次都要重挂。
+        // ⚠ **这里绝不能顺手续期**：重绘不只来自用户操作，双向绑定的数据刷新
+        //   也会重绘。写在这里的话，角色身上有个每几秒跳一次的效果，
+        //   轮盘就永远不会自动收起（2026-08-05 实测到过）。只有真实交互才续期。
+        content.addEventListener("mousemove", this.#touchIdle);
     }
 
+    /**
+     * 续上"无操作自动收起"的计时（Nous 2026-08-05 提出：晾着不动会挡视野）。
+     * 任何交互——移动鼠标、点击、翻页、重绘——都会重新计时。
+     */
+    #touchIdle = (): void => {
+        if (this.#idleTimer) clearTimeout(this.#idleTimer);
+        this.#idleTimer = setTimeout(() => { void this.close(); }, IDLE_DISMISS_MS);
+    };
+
     #onClick = (ev: MouseEvent): void => {
+        this.#touchIdle();
         const el = ev.target as HTMLElement;
 
         // —— 底部胶囊导航：‹ 上一项 · ↩ 返回 · › 下一项 ——
@@ -349,6 +373,9 @@ export class WheelApp extends AppV2 {
     };
 
     #onHover = (ev: MouseEvent): void => {
+        // ⚠ 这里**不续期**空闲计时：光标停着不动时，重绘换掉脚下的节点
+        //   浏览器照样会补发一次 mouseover —— 那不是"用户在操作"。
+        //   只有真正的指针移动（mousemove）与点击才算（2026-08-05 实测踩到）。
         const el = ev.target as HTMLElement;
         // ⚠ 翻选条自己不触发重画：它就住在毂文字那个 <g> 里，重画会把光标脚下的
         //   节点换掉，浏览器随即再发一次 mouseover → 无限重画。
@@ -389,6 +416,8 @@ export class WheelApp extends AppV2 {
             void this.close();
         };
 
+        this.#touchIdle();          // 开盘即开始倒数
+
         // 延后一帧挂载，避免呼出那一次点击立刻把自己关掉
         setTimeout(() => {
             document.addEventListener("mousedown", this.outsideHandler!);
@@ -402,6 +431,10 @@ export class WheelApp extends AppV2 {
         if (this.outsideHandler) {
             document.removeEventListener("mousedown", this.outsideHandler);
             this.outsideHandler = undefined;
+        }
+        if (this.#idleTimer) {
+            clearTimeout(this.#idleTimer);
+            this.#idleTimer = undefined;
         }
         if (this.escHandler) {
             document.removeEventListener("keydown", this.escHandler, { capture: true });

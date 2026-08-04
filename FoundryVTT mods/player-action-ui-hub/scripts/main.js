@@ -173,6 +173,7 @@ var ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
 var CAPSULE_SPAN = GAP_ANGLE - 0.16;
 var CAPSULE_R_INNER = 60;
 var CAPSULE_R_OUTER = 84;
+var IDLE_DISMISS_MS = 5e3;
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
@@ -219,6 +220,8 @@ var WheelApp = class extends AppV2 {
   economy;
   /** 点了撤回时调用，由外部注入（真正的记账退还在外面做）。 */
   onUndo;
+  /** 无操作自动收起的计时器 */
+  #idleTimer;
   /** 换一层内容并重绘（钻取与双向绑定都走这里） */
   async setLevel(level) {
     this.level = level;
@@ -431,8 +434,20 @@ var WheelApp = class extends AppV2 {
     content.replaceChildren(result);
     content.addEventListener("click", this.#onClick);
     content.addEventListener("mouseover", this.#onHover);
+    content.addEventListener("mousemove", this.#touchIdle);
   }
+  /**
+   * 续上"无操作自动收起"的计时（Nous 2026-08-05 提出：晾着不动会挡视野）。
+   * 任何交互——移动鼠标、点击、翻页、重绘——都会重新计时。
+   */
+  #touchIdle = /* @__PURE__ */ __name(() => {
+    if (this.#idleTimer) clearTimeout(this.#idleTimer);
+    this.#idleTimer = setTimeout(() => {
+      void this.close();
+    }, IDLE_DISMISS_MS);
+  }, "#touchIdle");
   #onClick = /* @__PURE__ */ __name((ev) => {
+    this.#touchIdle();
     const el = ev.target;
     const nav = el?.dataset?.nav;
     if (nav) {
@@ -481,6 +496,7 @@ var WheelApp = class extends AppV2 {
       ev.stopPropagation();
       void this.close();
     };
+    this.#touchIdle();
     setTimeout(() => {
       document.addEventListener("mousedown", this.outsideHandler);
       document.addEventListener("keydown", this.escHandler, { capture: true });
@@ -491,6 +507,10 @@ var WheelApp = class extends AppV2 {
     if (this.outsideHandler) {
       document.removeEventListener("mousedown", this.outsideHandler);
       this.outsideHandler = void 0;
+    }
+    if (this.#idleTimer) {
+      clearTimeout(this.#idleTimer);
+      this.#idleTimer = void 0;
     }
     if (this.escHandler) {
       document.removeEventListener("keydown", this.escHandler, { capture: true });
