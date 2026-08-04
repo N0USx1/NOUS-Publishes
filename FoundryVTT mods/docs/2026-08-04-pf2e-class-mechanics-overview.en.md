@@ -10,9 +10,8 @@
 > This document supplies the "upward" view — what the class is actually doing at the table every round,
 > and how much of that the system actually handles. Direction proposed by Nous on 2026-08-04.
 >
-> **Relationship to the other two documents**: This one = the full factual dossier (a reusable asset);
-> [Class Signature Operations Inventory](./2026-08-04-pf2e-class-inventory.md) = the compressed version aimed at wheel design (pain points + three categories of gaps);
-> [Design Lock-In](./2026-08-04-pf2e-action-wheel-design.md) = the module design proper.
+> **Relationship to the other document**: This one = the full factual dossier (a reusable asset);
+> [Class Signature Operations Inventory](./2026-08-04-pf2e-class-inventory.md) = the compressed version aimed at wheel design (pain points + three categories of gaps).
 >
 > **Shelf-life reminder**: the pf2e system iterates fast; entries get added and removed.
 > This is a 2026-08-04 snapshot — verify against the current version before citing it.

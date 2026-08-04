@@ -1,6 +1,6 @@
 # PF2e Class Signature Action Inventory (Upward View)
 
-> Appendix; read together with the [Design Freeze](./2026-08-04-pf2e-action-wheel-design.md).
+> Appendix; the class-by-class upward view that the module design builds on.
 > Data source: foundryvtt/pf2e @ `v14-dev` (commit d895642, 2026-08-03), all 29 classes read one by one against
 > `packs/pf2e/actions/class/`, `packs/pf2e/class-features/`, plus a full-text search of `src/`.
 > **Why this document exists**: deriving "what APIs exist" from the system source code alone (the downward view) treats
