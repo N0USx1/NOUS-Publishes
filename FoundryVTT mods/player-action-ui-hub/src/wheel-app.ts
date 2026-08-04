@@ -1,4 +1,4 @@
-import { sectorPath, sectorCentroid, capsuleCellPath, capsuleCentroid } from "./geometry";
+import { sectorPath, sectorCentroid } from "./geometry";
 import type { WheelLevel, SectorData } from "./types";
 import { wrapText } from "./text";
 import { glyphs } from "./economy";
@@ -19,21 +19,33 @@ const AppV2 = foundry.applications.api.ApplicationV2;
 const HUB_CHARS_PER_LINE = 16;
 
 /**
- * 环底缺口的张角（弧度）。扇区只铺 `2π - 这个值`，剩下的留给导航胶囊。
- * 照 Nous 2026-08-05 的 mockup：环不是整圆，底下切开一块坐胶囊。
+ * 导航胶囊：**横着的一块圆角条**，坐在环底缺口里（Nous 2026-08-05 定）。
+ *
+ * ★ 为什么不做成弧形：弧形要拟合极坐标去还原一个只能目测的形状，我连着三版
+ *   比例都没对上。矩形＋圆角没有可估错的量，而且横条比弧形段更好点中。
  */
-const GAP_ANGLE = 1.05;
+const CAP_W = 66;        // 整条宽
+const CAP_H = 19;        // 高
+const CAP_R = 9;         // 圆角半径 ≈ 半高，两端就是半圆头
+/**
+ * 顶边 y。取 164 使胶囊上半截**嵌进环带**（环底外缘 y=174），
+ * 只有下半截露在环外 —— mockup 里它是"从环底切出来的一块"，不是挂在环下面的另一个牌子。
+ * 第一版取 172 就是只压了 2 个单位，看上去成了浮在环下的独立药丸。
+ */
+const CAP_TOP = 164;
+
+/**
+ * 环底缺口的张角（弧度）。扇区只铺 `2π - 这个值`，剩下的留给导航胶囊。
+ *
+ * ★ **算出来的，不是估的**：缺口两条径向切边必须在胶囊**上边角**处让开
+ *   `CAP_W/2 + 留白`，否则胶囊的肩膀会压到环上。
+ *   上边角离圆心的纵向距离 = CAP_TOP - CY；切边半角 θ = atan(需让开的横向距离 / 该纵距)。
+ *   estimate 一个角度是当初对不上 mockup 的老毛病，这里直接解出来。
+ */
+const CAP_GUTTER = 1;    // 胶囊肩膀与环切边之间的留白
+const GAP_ANGLE = 2 * Math.atan((CAP_W / 2 + CAP_GUTTER) / (CAP_TOP - CY));
 /** 扇区实际占的弧长 */
 const ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
-/** 胶囊占的弧长，略小于缺口，两侧各留一点空 */
-const CAPSULE_SPAN = GAP_ANGLE + 0.30;   // 胶囊比缺口宽：它挂在环外，不必受缺口约束
-/**
- * 胶囊的径向范围。★ **它探出环外**（外径 > R_OUTER）——
- * mockup 里胶囊是挂在环底缺口下方的一块独立胶囊，不是嵌在环里的一格。
- * 我最初做成了后者，比例完全不对（Nous 2026-08-05 指出）。
- */
-const CAPSULE_R_INNER = 78;
-const CAPSULE_R_OUTER = 98;
 
 /**
  * 多久没动就自动收起（毫秒）。Nous 2026-08-05：晾着不动会挡视野。
@@ -233,22 +245,41 @@ export class WheelApp extends AppV2 {
             { action: "next", glyph: "›", enabled: canCycle },
         ];
 
-        cells.forEach((cell, index) => {
-            const spec = {
-                index, total: cells.length, span: CAPSULE_SPAN,
-                rInner: CAPSULE_R_INNER, rOuter: CAPSULE_R_OUTER,
-                cx: CX, cy: CY, gap: 0.035,
-            };
-            const path = document.createElementNS(SVG_NS, "path");
-            path.setAttribute("d", capsuleCellPath(spec));
-            path.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
-            if (cell.enabled) path.dataset.nav = cell.action;
-            svg.appendChild(path);
+        const cellW = CAP_W / cells.length;
+        const left = CX - CAP_W / 2;
 
-            const c = capsuleCentroid(spec);
+        cells.forEach((cell, index) => {
+            const x = left + index * cellW;
+            // 只有两端要圆角：中间那格是直的。用 rx 会四角全圆，
+            // 所以整条底下先垫一个圆角矩形，格子画在它上面、靠描边分隔。
+            const r = document.createElementNS(SVG_NS, "rect");
+            r.setAttribute("x", String(x));
+            r.setAttribute("y", String(CAP_TOP));
+            r.setAttribute("width", String(cellW));
+            r.setAttribute("height", String(CAP_H));
+            if (index === 0 || index === cells.length - 1) {
+                r.setAttribute("rx", String(CAP_R));
+                r.setAttribute("ry", String(CAP_R));
+            }
+            r.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
+            if (cell.enabled) r.dataset.nav = cell.action;
+            svg.appendChild(r);
+
+            // 两端那格的圆角会把朝内那侧也削圆，补一个方块把内侧填平
+            if (index === 0 || index === cells.length - 1) {
+                const patch = document.createElementNS(SVG_NS, "rect");
+                patch.setAttribute("x", String(index === 0 ? x + cellW - CAP_R : x));
+                patch.setAttribute("y", String(CAP_TOP));
+                patch.setAttribute("width", String(CAP_R));
+                patch.setAttribute("height", String(CAP_H));
+                patch.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
+                if (cell.enabled) patch.dataset.nav = cell.action;
+                svg.appendChild(patch);
+            }
+
             const t = document.createElementNS(SVG_NS, "text");
-            t.setAttribute("x", String(c.x));
-            t.setAttribute("y", String(c.y));
+            t.setAttribute("x", String(x + cellW / 2));
+            t.setAttribute("y", String(CAP_TOP + CAP_H / 2));
             t.setAttribute("class", `pauih-cap-glyph${cell.enabled ? "" : " disabled"}`);
             t.textContent = cell.glyph;
             svg.appendChild(t);
@@ -294,6 +325,19 @@ export class WheelApp extends AppV2 {
                 line(l, y, `pauih-hub-reason state-${sector.state}`);
                 y += lineHeight;
             }
+        }
+
+        // MAP 三段的当前项，例 "◆ +9 (MAP -5)"。
+        //
+        // ★ **少了这一行，翻选就是完全无反馈的。** 2026-08-05 实测复现：
+        //   点胶囊的 › 之后 `variant.index` 确实由 0 变成 1，但屏幕上一个像素都没变，
+        //   玩家无从知道自己下一击算的是第几段 —— 而 MAP 恰恰是 PF2e 最容易算错的一处，
+        //   把它显示出来正是本模组的根理（设计定档 §0）。
+        //   这行原本在毂里，把翻选箭头挪进底部胶囊时被一起删掉了，是那次改版的漏网。
+        //   （`.pauih-variant` 的样式当时留了下来，所以这里不需要新样式。）
+        if (this.level.variant?.labels.length) {
+            const v = this.level.variant;
+            line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
         }
 
         this.#paintEconomy(g);

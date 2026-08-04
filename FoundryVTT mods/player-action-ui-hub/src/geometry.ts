@@ -89,58 +89,7 @@ export function hitTest(
     return Math.min(Math.floor(angle / step), total - 1);
 }
 
-/** 底部导航胶囊的一格。 */
-export interface CapsuleSpec {
-    /** 第几格，0 起（从左到右） */
-    index: number;
-    /** 一共几格 */
-    total: number;
-    /** 胶囊占多大一段弧（弧度），应略小于环底缺口 */
-    span: number;
-    /** 胶囊的内外半径 */
-    rInner: number;
-    rOuter: number;
-    cx: number;
-    cy: number;
-    /** 格与格之间的缝隙（弧度） */
-    gap?: number;
-}
-
-/**
- * 底部导航胶囊某一格的 SVG path。
- *
- * 胶囊坐在环底缺口里，**以正下方为中心**对称铺开，格子从左到右排。
- * 圆角由 CSS 的 `stroke-linejoin: round` 加同色描边实现 ——
- * SVG 的 path 没有原生圆角，这是通用做法。
- */
-export function capsuleCellPath(spec: CapsuleSpec): string {
-    const { index, total, span, rInner, rOuter, cx, cy, gap = 0 } = spec;
-    const step = span / total;
-    // +PI/2 = 正下方。整段以它为中心；SVG 里角度顺时针增大，
-    // 所以「左到右」对应角度从大到小，这里用 (total-1-index) 把顺序倒过来。
-    const start = Math.PI / 2 - span / 2 + (total - 1 - index) * step;
-    const a0 = start + gap / 2;
-    const a1 = start + step - gap / 2;
-
-    const o0 = polar(cx, cy, rOuter, a0);
-    const o1 = polar(cx, cy, rOuter, a1);
-    const i1 = polar(cx, cy, rInner, a1);
-    const i0 = polar(cx, cy, rInner, a0);
-    const f = (n: number) => n.toFixed(2);
-
-    return [
-        `M ${f(o0.x)} ${f(o0.y)}`,
-        `A ${rOuter} ${rOuter} 0 0 1 ${f(o1.x)} ${f(o1.y)}`,
-        `L ${f(i1.x)} ${f(i1.y)}`,
-        `A ${rInner} ${rInner} 0 0 0 ${f(i0.x)} ${f(i0.y)}`,
-        "Z",
-    ].join(" ");
-}
-
-/** 胶囊某一格的视觉中心，用来摆图标/箭头。 */
-export function capsuleCentroid(spec: CapsuleSpec): { x: number; y: number } {
-    const { index, total, span, rInner, rOuter, cx, cy } = spec;
-    const step = span / total;
-    const start = Math.PI / 2 - span / 2 + (total - 1 - index) * step;
-    return polar(cx, cy, (rOuter + rInner) / 2, start + step / 2);
-}
+// ⚠ 这里原本还有一套「弧形胶囊」（capsuleCellPath/capsuleCentroid），
+//   2026-08-05 按 Nous 的要求改成环下方的**横排圆角矩形**后删除。
+//   横排矩形由 wheel-app 直接画 <rect rx>，不需要极坐标拟合 ——
+//   把形状塞进极坐标正是当初对不上 mockup 的根因。

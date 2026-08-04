@@ -37,33 +37,6 @@ function sectorCentroid(spec) {
   return polar(cx, cy, (rOuter + rInner) / 2, (a0 + a1) / 2);
 }
 __name(sectorCentroid, "sectorCentroid");
-function capsuleCellPath(spec) {
-  const { index, total, span, rInner, rOuter, cx, cy, gap = 0 } = spec;
-  const step = span / total;
-  const start = Math.PI / 2 - span / 2 + (total - 1 - index) * step;
-  const a0 = start + gap / 2;
-  const a1 = start + step - gap / 2;
-  const o0 = polar(cx, cy, rOuter, a0);
-  const o1 = polar(cx, cy, rOuter, a1);
-  const i1 = polar(cx, cy, rInner, a1);
-  const i0 = polar(cx, cy, rInner, a0);
-  const f = /* @__PURE__ */ __name((n) => n.toFixed(2), "f");
-  return [
-    `M ${f(o0.x)} ${f(o0.y)}`,
-    `A ${rOuter} ${rOuter} 0 0 1 ${f(o1.x)} ${f(o1.y)}`,
-    `L ${f(i1.x)} ${f(i1.y)}`,
-    `A ${rInner} ${rInner} 0 0 0 ${f(i0.x)} ${f(i0.y)}`,
-    "Z"
-  ].join(" ");
-}
-__name(capsuleCellPath, "capsuleCellPath");
-function capsuleCentroid(spec) {
-  const { index, total, span, rInner, rOuter, cx, cy } = spec;
-  const step = span / total;
-  const start = Math.PI / 2 - span / 2 + (total - 1 - index) * step;
-  return polar(cx, cy, (rOuter + rInner) / 2, start + step / 2);
-}
-__name(capsuleCentroid, "capsuleCentroid");
 
 // src/text.ts
 function charWidth(ch) {
@@ -168,11 +141,13 @@ var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
 var HUB_CHARS_PER_LINE = 16;
-var GAP_ANGLE = 1.05;
+var CAP_W = 66;
+var CAP_H = 19;
+var CAP_R = 9;
+var CAP_TOP = 164;
+var CAP_GUTTER = 1;
+var GAP_ANGLE = 2 * Math.atan((CAP_W / 2 + CAP_GUTTER) / (CAP_TOP - CY));
 var ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
-var CAPSULE_SPAN = GAP_ANGLE + 0.3;
-var CAPSULE_R_INNER = 78;
-var CAPSULE_R_OUTER = 98;
 var IDLE_DISMISS_MS = 5e3;
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
@@ -342,26 +317,35 @@ var WheelApp = class extends AppV2 {
       { action: "back", glyph: "\u21A9", enabled: this.level.canGoBack },
       { action: "next", glyph: "\u203A", enabled: canCycle }
     ];
+    const cellW = CAP_W / cells.length;
+    const left = CX - CAP_W / 2;
     cells.forEach((cell, index) => {
-      const spec = {
-        index,
-        total: cells.length,
-        span: CAPSULE_SPAN,
-        rInner: CAPSULE_R_INNER,
-        rOuter: CAPSULE_R_OUTER,
-        cx: CX,
-        cy: CY,
-        gap: 0.035
-      };
-      const path = document.createElementNS(SVG_NS, "path");
-      path.setAttribute("d", capsuleCellPath(spec));
-      path.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
-      if (cell.enabled) path.dataset.nav = cell.action;
-      svg.appendChild(path);
-      const c = capsuleCentroid(spec);
+      const x = left + index * cellW;
+      const r = document.createElementNS(SVG_NS, "rect");
+      r.setAttribute("x", String(x));
+      r.setAttribute("y", String(CAP_TOP));
+      r.setAttribute("width", String(cellW));
+      r.setAttribute("height", String(CAP_H));
+      if (index === 0 || index === cells.length - 1) {
+        r.setAttribute("rx", String(CAP_R));
+        r.setAttribute("ry", String(CAP_R));
+      }
+      r.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
+      if (cell.enabled) r.dataset.nav = cell.action;
+      svg.appendChild(r);
+      if (index === 0 || index === cells.length - 1) {
+        const patch = document.createElementNS(SVG_NS, "rect");
+        patch.setAttribute("x", String(index === 0 ? x + cellW - CAP_R : x));
+        patch.setAttribute("y", String(CAP_TOP));
+        patch.setAttribute("width", String(CAP_R));
+        patch.setAttribute("height", String(CAP_H));
+        patch.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
+        if (cell.enabled) patch.dataset.nav = cell.action;
+        svg.appendChild(patch);
+      }
       const t = document.createElementNS(SVG_NS, "text");
-      t.setAttribute("x", String(c.x));
-      t.setAttribute("y", String(c.y));
+      t.setAttribute("x", String(x + cellW / 2));
+      t.setAttribute("y", String(CAP_TOP + CAP_H / 2));
       t.setAttribute("class", `pauih-cap-glyph${cell.enabled ? "" : " disabled"}`);
       t.textContent = cell.glyph;
       svg.appendChild(t);
@@ -399,6 +383,10 @@ var WheelApp = class extends AppV2 {
         line(l, y, `pauih-hub-reason state-${sector.state}`);
         y += lineHeight;
       }
+    }
+    if (this.level.variant?.labels.length) {
+      const v = this.level.variant;
+      line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
     }
     this.#paintEconomy(g);
   }

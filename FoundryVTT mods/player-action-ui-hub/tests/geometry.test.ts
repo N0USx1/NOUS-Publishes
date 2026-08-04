@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sectorPath, sectorCentroid, hitTest, capsuleCellPath, capsuleCentroid } from "../src/geometry";
+import { sectorPath, sectorCentroid, hitTest } from "../src/geometry";
 
 describe("sectorPath", () => {
     // ★ 语义 2026-08-05 改过：原先是"第 0 扇区居中于正上方"，
@@ -94,27 +94,5 @@ describe("arcSpan（底部缺口）", () => {
             expect(hit).toBeGreaterThanOrEqual(-1);
             expect(hit).toBeLessThan(base.total);
         }
-    });
-});
-
-describe("capsuleCellPath", () => {
-    const base = { total: 3, span: 1.0, rInner: 58, rOuter: 80, cx: 100, cy: 100, gap: 0.03 };
-
-    it("三格路径互不相同且都闭合", () => {
-        const paths = [0, 1, 2].map(index => capsuleCellPath({ ...base, index }));
-        expect(new Set(paths).size).toBe(3);
-        for (const d of paths) expect(d.trim().endsWith("Z")).toBe(true);
-    });
-
-    it("中间那格的形心在正下方", () => {
-        const c = capsuleCentroid({ ...base, index: 1 });
-        expect(c.x).toBeCloseTo(100, 0);
-        expect(c.y).toBeGreaterThan(100);
-    });
-
-    it("第 0 格在左、第 2 格在右", () => {
-        const left = capsuleCentroid({ ...base, index: 0 });
-        const right = capsuleCentroid({ ...base, index: 2 });
-        expect(left.x).toBeLessThan(right.x);
     });
 });
