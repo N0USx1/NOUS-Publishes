@@ -85,7 +85,12 @@ var WheelApp = class extends AppV2 {
   };
   /** 当前层 */
   level;
-  /** 点击扇区的回调，由外部注入 */
+  /**
+   * 点击扇区的回调，由外部注入。
+   * ⚠ 第二个参数是**真实的 MouseEvent**，不是合成的：掷骰时要原样传给
+   *   pf2e 的 `variant.roll({ event })`，生态里的模组（PF2e Toolbelt 自动掩护等）
+   *   靠它拿检定上下文（设计定档 §6.3）。
+   */
   onPick;
   /** 点击盘外关闭用的监听器，记着以便解绑 */
   outsideHandler;
@@ -189,7 +194,7 @@ var WheelApp = class extends AppV2 {
     const idx = el?.dataset?.index;
     if (idx === void 0) return;
     const sector = this.level.sectors[Number(idx)];
-    if (sector) this.onPick(sector);
+    if (sector) this.onPick(sector, ev);
   }, "#onClick");
   #onHover = /* @__PURE__ */ __name((ev) => {
     const el = ev.target;
@@ -246,8 +251,81 @@ function resolveActor() {
 }
 __name(resolveActor, "resolveActor");
 
+// src/collector.ts
+function strikeSectorId(strike, index) {
+  return `strike:${strike?.item?.id ?? strike?.slug ?? index}`;
+}
+__name(strikeSectorId, "strikeSectorId");
+function collectStrikes(actor) {
+  try {
+    const actions = actor?.system?.actions;
+    if (!Array.isArray(actions)) return [];
+    return actions.filter((a) => a?.type === "strike").map((strike, i) => {
+      const ready = strike.ready !== false;
+      const drawAux = (strike.auxiliaryActions ?? [])[0];
+      return {
+        id: strikeSectorId(strike, i),
+        label: String(strike.label ?? strike.slug ?? "?"),
+        cost: "1",
+        // 未拔出 = gated（规则上此刻确实打不了），不是 risky
+        state: ready ? "normal" : "gated",
+        reason: ready ? void 0 : "Not drawn \u2014 spend \u25C6 to draw it first.",
+        badge: !ready && drawAux ? "\u25C6 Draw" : void 0
+      };
+    });
+  } catch (err) {
+    console.error("player-action-ui-hub | collectStrikes \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(collectStrikes, "collectStrikes");
+
+// src/executor.ts
+function findStrike(actor, strikeId) {
+  const actions = actor?.system?.actions;
+  if (!Array.isArray(actions)) return null;
+  const strikes = actions.filter((a) => a?.type === "strike");
+  return strikes.find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
+}
+__name(findStrike, "findStrike");
+async function rollStrike(actor, strikeId, map, event) {
+  try {
+    const strike = findStrike(actor, strikeId);
+    if (!strike) {
+      ui.notifications.warn("That strike is no longer available \u2014 reopen the wheel.");
+      return;
+    }
+    const variant = strike.variants?.[map];
+    if (!variant) {
+      ui.notifications.warn("That strike has no such attack in the sequence.");
+      return;
+    }
+    await variant.roll({ event });
+  } catch (err) {
+    console.error("player-action-ui-hub | rollStrike \u5931\u8D25", err);
+    ui.notifications.error("The roll failed \u2014 see the console for details.");
+  }
+}
+__name(rollStrike, "rollStrike");
+async function execAuxiliary(actor, strikeId, auxIndex) {
+  try {
+    const strike = findStrike(actor, strikeId);
+    const aux = strike?.auxiliaryActions?.[auxIndex];
+    if (!aux) {
+      ui.notifications.warn("This weapon has no such action.");
+      return;
+    }
+    await aux.execute();
+  } catch (err) {
+    console.error("player-action-ui-hub | execAuxiliary \u5931\u8D25", err);
+    ui.notifications.error("The action failed \u2014 see the console for details.");
+  }
+}
+__name(execAuxiliary, "execAuxiliary");
+
 // src/main.ts
 var MODULE_ID = "player-action-ui-hub";
+var BACK_SECTOR = { id: "__back", label: "\u21A9 Back", cost: null, state: "normal" };
 var lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 document.addEventListener("mousemove", (ev) => {
   lastMouse = { x: ev.clientX, y: ev.clientY };
@@ -270,8 +348,33 @@ function openAt(x, y) {
       { id: "spells", label: "Spells", cost: null, state: "normal" }
     ]
   };
-  openWheel = new WheelApp(level, (s) => {
-    console.log("\u5206\u7C7B:", s.id);
+  openWheel = new WheelApp(level, (s, ev) => {
+    if (s.id === "strikes") {
+      const strikes = collectStrikes(actor);
+      if (!strikes.length) {
+        ui.notifications.info("This character has no strikes available.");
+        return;
+      }
+      void openWheel.setLevel({
+        title: "Strikes",
+        canGoBack: true,
+        sectors: [...strikes, BACK_SECTOR]
+      });
+      return;
+    }
+    if (s.id === "__back") {
+      void openWheel.setLevel(level);
+      return;
+    }
+    if (s.id.startsWith("strike:")) {
+      if (s.state === "gated") {
+        void execAuxiliary(actor, s.id, 0).then(() => openWheel?.close());
+      } else {
+        void rollStrike(actor, s.id, 0, ev).then(() => openWheel?.close());
+      }
+      return;
+    }
+    ui.notifications.info(`"${s.label}" is not implemented yet.`);
   });
   void openWheel.openAt(x, y);
 }

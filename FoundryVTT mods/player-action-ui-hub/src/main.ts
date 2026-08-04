@@ -1,8 +1,13 @@
 import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
-import type { WheelLevel } from "./types";
+import { collectStrikes } from "./collector";
+import { rollStrike, execAuxiliary } from "./executor";
+import type { SectorData, WheelLevel } from "./types";
 
 const MODULE_ID = "player-action-ui-hub";
+
+/** 返回上一层的扇区。id 以双下划线打头，不会与真实条目的 id 撞。 */
+const BACK_SECTOR: SectorData = { id: "__back", label: "↩ Back", cost: null, state: "normal" };
 
 // 记录鼠标位置：轮盘以鼠标为圆心弹出，而按键呼出时事件里没有坐标。
 // ⚠ 放在模块顶层（不是 ready 内），因为 init 里注册的按键回调也要读它。
@@ -32,8 +37,43 @@ function openAt(x: number, y: number): void {
             { id: "spells",  label: "Spells",  cost: null, state: "normal" },
         ],
     };
-    openWheel = new WheelApp(level, (s) => {
-        console.log("分类:", s.id);
+    openWheel = new WheelApp(level, (s, ev) => {
+        // —— 分类层 → 打击层 ——
+        if (s.id === "strikes") {
+            const strikes = collectStrikes(actor);
+            if (!strikes.length) {
+                ui.notifications.info("This character has no strikes available.");
+                return;
+            }
+            void openWheel!.setLevel({
+                title: "Strikes",
+                canGoBack: true,
+                sectors: [...strikes, BACK_SECTOR],
+            });
+            return;
+        }
+
+        // —— 打击层 → 分类层 ——
+        if (s.id === "__back") {
+            void openWheel!.setLevel(level);
+            return;
+        }
+
+        // —— 打击层：执行 ——
+        if (s.id.startsWith("strike:")) {
+            if (s.state === "gated") {
+                // 「提示不是锁」：gated 一样能点。未拔出就先替玩家把武器拔出来，
+                // 而不是把这一格禁掉让人无从下手。
+                void execAuxiliary(actor, s.id, 0).then(() => openWheel?.close());
+            } else {
+                // map 先写死 0（第 1 击）；MAP 三段翻选是 Task 7 的事。
+                // ★ ev 是真实点击事件，必须一路传到 variant.roll({ event })。
+                void rollStrike(actor, s.id, 0, ev).then(() => openWheel?.close());
+            }
+            return;
+        }
+
+        ui.notifications.info(`"${s.label}" is not implemented yet.`);
     });
     void openWheel.openAt(x, y);
 }

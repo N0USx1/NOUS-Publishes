@@ -1,6 +1,19 @@
 import type { SectorData } from "./types";
 
 /**
+ * 扇区 id ↔ strike 的对应关系。
+ *
+ * ⚠ 采集（collector）与执行（executor）**必须调同一个函数**算这个 id，
+ *   各写各的迟早会在退化分支上分叉（例如没有 item.id 也没有 slug 时退到下标），
+ *   那时回查静默落空、点了没反应。
+ *
+ * @param index 在**已过滤出的 strike 列表**里的下标，不是 system.actions 的原始下标
+ */
+export function strikeSectorId(strike: any, index: number): string {
+    return `strike:${strike?.item?.id ?? strike?.slug ?? index}`;
+}
+
+/**
  * 从 actor 采集打击，转成盘面扇区。**只读，绝不写 actor。**
  *
  * ⛔ 门禁判据用 `strike.ready`，**绝不能用 `strike.canAttack`**：
@@ -24,7 +37,7 @@ export function collectStrikes(actor: any): SectorData[] {
                 const drawAux = (strike.auxiliaryActions ?? [])[0];
 
                 return {
-                    id: `strike:${strike.item?.id ?? strike.slug ?? i}`,
+                    id: strikeSectorId(strike, i),
                     label: String(strike.label ?? strike.slug ?? "?"),
                     cost: "1",
                     // 未拔出 = gated（规则上此刻确实打不了），不是 risky

@@ -55,14 +55,23 @@ export class WheelApp extends AppV2 {
 
     /** 当前层 */
     private level: WheelLevel;
-    /** 点击扇区的回调，由外部注入 */
-    private onPick: (sector: SectorData) => void;
+    /**
+     * 点击扇区的回调，由外部注入。
+     * ⚠ 第二个参数是**真实的 MouseEvent**，不是合成的：掷骰时要原样传给
+     *   pf2e 的 `variant.roll({ event })`，生态里的模组（PF2e Toolbelt 自动掩护等）
+     *   靠它拿检定上下文（设计定档 §6.3）。
+     */
+    private onPick: (sector: SectorData, ev: MouseEvent) => void;
     /** 点击盘外关闭用的监听器，记着以便解绑 */
     private outsideHandler?: (ev: MouseEvent) => void;
     /** Esc 关闭用的监听器（Foundry 不管无框窗，见 openAt 注释），记着以便解绑 */
     private escHandler?: (ev: KeyboardEvent) => void;
 
-    constructor(level: WheelLevel, onPick: (s: SectorData) => void, options: object = {}) {
+    constructor(
+        level: WheelLevel,
+        onPick: (s: SectorData, ev: MouseEvent) => void,
+        options: object = {},
+    ) {
         super(options);
         this.level = level;
         this.onPick = onPick;
@@ -181,7 +190,7 @@ export class WheelApp extends AppV2 {
         const idx = el?.dataset?.index;
         if (idx === undefined) return;
         const sector = this.level.sectors[Number(idx)];
-        if (sector) this.onPick(sector);
+        if (sector) this.onPick(sector, ev);
     };
 
     #onHover = (ev: MouseEvent): void => {
