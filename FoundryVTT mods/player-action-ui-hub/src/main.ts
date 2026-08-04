@@ -18,6 +18,33 @@ document.addEventListener("mousemove", (ev) => {
 
 /** 当前打开的轮盘；同一时刻只允许一个 */
 let openWheel: WheelApp | null = null;
+/**
+ * 当前轮盘是为**哪个** actor 开的。
+ * ⚠ 别在钩子里改用 `resolveActor()` 现算：轮盘开着的时候玩家可能已经改选了别的
+ *   token，那时现算出来的不是盘面对应的角色，会拿别人的变更去刷新我们的盘。
+ */
+let openWheelActor: any = null;
+
+/**
+ * 由 actor 现算一层"打击"盘面；这个角色没有打击时返回 null。
+ *
+ * ★ 单独抽出来是因为它要被调**两次**：进入这一层时算一次，
+ *   之后每次角色数据变化（拔刀/收刀）再算一次。两处必须同一份逻辑，
+ *   否则刷新出来的盘面会和刚进来时长得不一样。
+ */
+function buildStrikeLevel(actor: any): WheelLevel | null {
+    const strikes = collectStrikes(actor);
+    if (!strikes.length) return null;
+    // 翻选条的"默认文字"取本层第一个条目的；悬停到别的武器时
+    // 由 WheelApp 换成那把武器自己的（不同武器加值不同，见 types.ts）。
+    const labels = strikes[0]?.variantLabels ?? [];
+    return {
+        title: "Strikes",
+        canGoBack: true,
+        variant: labels.length ? { index: 0, labels } : undefined,
+        sectors: [...strikes, BACK_SECTOR],
+    };
+}
 
 /** 在屏幕坐标 (x, y) 处呼出分类层轮盘。 */
 function openAt(x: number, y: number): void {
@@ -27,6 +54,7 @@ function openAt(x: number, y: number): void {
         return;
     }
     openWheel?.close();
+    openWheelActor = actor;
     const level: WheelLevel = {
         title: actor.name,
         canGoBack: false,
@@ -40,25 +68,22 @@ function openAt(x: number, y: number): void {
     openWheel = new WheelApp(level, (s, ev) => {
         // —— 分类层 → 打击层 ——
         if (s.id === "strikes") {
-            const strikes = collectStrikes(actor);
-            if (!strikes.length) {
+            const strikeLevel = buildStrikeLevel(actor);
+            if (!strikeLevel) {
                 ui.notifications.info("This character has no strikes available.");
                 return;
             }
-            // 翻选条的"默认文字"取本层第一个条目的；悬停到别的武器时
-            // 由 WheelApp 换成那把武器自己的（不同武器加值不同，见 types.ts）。
-            const labels = strikes[0]?.variantLabels ?? [];
-            void openWheel!.setLevel({
-                title: "Strikes",
-                canGoBack: true,
-                variant: labels.length ? { index: 0, labels } : undefined,
-                sectors: [...strikes, BACK_SECTOR],
-            });
+            // ★ 双向绑定的接线口：交给轮盘一份"重算这一层"的做法，
+            //   之后角色一变（拔刀/收刀）它就照这个重画自己。
+            openWheel!.rebuild = () => buildStrikeLevel(actor);
+            void openWheel!.setLevel(strikeLevel);
             return;
         }
 
         // —— 打击层 → 分类层 ——
         if (s.id === "__back") {
+            // 分类层是四个写死的格子，没有随角色变的东西 → 撤掉重算回调
+            openWheel!.rebuild = undefined;
             void openWheel!.setLevel(level);
             return;
         }
@@ -68,7 +93,11 @@ function openAt(x: number, y: number): void {
             if (s.state === "gated") {
                 // 「提示不是锁」：gated 一样能点。未拔出就先替玩家把武器拔出来，
                 // 而不是把这一格禁掉让人无从下手。
-                void execAuxiliary(actor, s.id, 0).then(() => openWheel?.close());
+                //
+                // ★ **准备类动作执行后不关盘**（Nous 2026-08-05）：拔刀不是一件
+                //   "做完了"的事，玩家的本意是接着打。盘留着，让双向绑定把这一格
+                //   由灰转正常，下一下就能点它攻击。终结类（掷骰）才关。
+                void execAuxiliary(actor, s.id, 0);
             } else {
                 // 打第几击由毂底的翻选条决定（没有翻选条时是 0 = 第 1 击）。
                 // ★ ev 是真实点击事件，必须一路传到 executor（它再翻成意图事件）。
@@ -151,5 +180,21 @@ Hooks.once("ready", () => {
             me.stopImmediatePropagation();           // 连同 document 上其它捕获监听一起挡
             if (type === "pointerdown") openAt(me.clientX, me.clientY);   // 只在第一个事件上开盘
         }, { capture: true });
+    }
+
+    // —— 双向绑定：角色数据变了就重画开着的盘面 ——
+    //
+    // pf2e 没有"状态已落地"这种自定义钩子，只能用 Foundry 核心的文档钩子。
+    // 四个全挂：findings-v0.1 §6 记的是"拔刀触发哪个钩子未测"，与其先猜一个，
+    // 不如都听——WheelApp.refresh() 自带合并，重复触发只会重画一次。
+    const REFRESH_HOOKS = ["updateActor", "updateItem", "createItem", "deleteItem"];
+    for (const h of REFRESH_HOOKS) {
+        Hooks.on(h, (doc: any) => {
+            if (!openWheel?.rendered || !openWheelActor) return;
+            // updateActor 给的就是 Actor；物品钩子给的是 Item，从它身上找宿主
+            const changed = doc?.documentName === "Actor" ? doc : (doc?.actor ?? doc?.parent);
+            if (!changed?.id || changed.id !== openWheelActor.id) return;   // 别人的角色变了不关我们的事
+            void openWheel.refresh();
+        });
     }
 });

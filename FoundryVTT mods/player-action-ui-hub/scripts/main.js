@@ -117,10 +117,42 @@ var WheelApp = class extends AppV2 {
     this.level = level;
     this.onPick = onPick;
   }
+  /**
+   * 重算当前层的回调，由外部注入；**没有它就不会自动刷新**。
+   * 返回 null 表示这一层已经无内容可显示（例如角色的打击全没了）→ 关盘。
+   */
+  rebuild;
+  /** refresh 的合并闸，见 refresh() 的注释 */
+  #refreshQueued = false;
   /** 换一层内容并重绘（钻取与双向绑定都走这里） */
   async setLevel(level) {
     this.level = level;
     await this.render(false);
+  }
+  /**
+   * 角色数据变了：重算当前层并重绘。轮盘＝角色卡的另一个实时视图，
+   * 靠这个方法兑现。
+   *
+   * ⚠ **必须合并**：一次拔刀会连着放出好几个文档钩子
+   * （物品的 equipped 变了 → updateItem，派生数据重算 → updateActor），
+   * 每个都直接 render 会在同一帧里重绘好几次，白闪且互相抢。
+   * 这里推迟到下一个宏任务再做，把这一串合成一次。
+   *
+   * 层结构不变时保留翻选条的下标——玩家翻到第 2 击，不该因为拔了把刀就跳回第 1 击。
+   */
+  async refresh() {
+    if (!this.rebuild || this.#refreshQueued) return;
+    this.#refreshQueued = true;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    this.#refreshQueued = false;
+    if (!this.rendered || !this.rebuild) return;
+    const next = this.rebuild();
+    if (!next) {
+      await this.close();
+      return;
+    }
+    if (this.level.variant && next.variant) next.variant.index = this.level.variant.index;
+    await this.setLevel(next);
   }
   // ⚠ 计划原文写的返回类型是 Promise<HTMLElement>，tsc 报 TS2740：
   //   SVGSVGElement 不是 HTMLElement。这里按实际产物改成 SVGElement。
@@ -292,6 +324,7 @@ var WheelApp = class extends AppV2 {
     }, 0);
   }
   async close(options = {}) {
+    this.rebuild = void 0;
     if (this.outsideHandler) {
       document.removeEventListener("mousedown", this.outsideHandler);
       this.outsideHandler = void 0;
@@ -407,6 +440,19 @@ document.addEventListener("mousemove", (ev) => {
   lastMouse = { x: ev.clientX, y: ev.clientY };
 });
 var openWheel = null;
+var openWheelActor = null;
+function buildStrikeLevel(actor) {
+  const strikes = collectStrikes(actor);
+  if (!strikes.length) return null;
+  const labels = strikes[0]?.variantLabels ?? [];
+  return {
+    title: "Strikes",
+    canGoBack: true,
+    variant: labels.length ? { index: 0, labels } : void 0,
+    sectors: [...strikes, BACK_SECTOR]
+  };
+}
+__name(buildStrikeLevel, "buildStrikeLevel");
 function openAt(x, y) {
   const actor = resolveActor();
   if (!actor) {
@@ -414,6 +460,7 @@ function openAt(x, y) {
     return;
   }
   openWheel?.close();
+  openWheelActor = actor;
   const level = {
     title: actor.name,
     canGoBack: false,
@@ -426,27 +473,23 @@ function openAt(x, y) {
   };
   openWheel = new WheelApp(level, (s, ev) => {
     if (s.id === "strikes") {
-      const strikes = collectStrikes(actor);
-      if (!strikes.length) {
+      const strikeLevel = buildStrikeLevel(actor);
+      if (!strikeLevel) {
         ui.notifications.info("This character has no strikes available.");
         return;
       }
-      const labels = strikes[0]?.variantLabels ?? [];
-      void openWheel.setLevel({
-        title: "Strikes",
-        canGoBack: true,
-        variant: labels.length ? { index: 0, labels } : void 0,
-        sectors: [...strikes, BACK_SECTOR]
-      });
+      openWheel.rebuild = () => buildStrikeLevel(actor);
+      void openWheel.setLevel(strikeLevel);
       return;
     }
     if (s.id === "__back") {
+      openWheel.rebuild = void 0;
       void openWheel.setLevel(level);
       return;
     }
     if (s.id.startsWith("strike:")) {
       if (s.state === "gated") {
-        void execAuxiliary(actor, s.id, 0).then(() => openWheel?.close());
+        void execAuxiliary(actor, s.id, 0);
       } else {
         const map = openWheel.currentVariantIndex();
         void rollStrike(actor, s.id, map, ev).then(() => openWheel?.close());
@@ -523,6 +566,15 @@ Hooks.once("ready", () => {
       me.stopImmediatePropagation();
       if (type === "pointerdown") openAt(me.clientX, me.clientY);
     }, { capture: true });
+  }
+  const REFRESH_HOOKS = ["updateActor", "updateItem", "createItem", "deleteItem"];
+  for (const h of REFRESH_HOOKS) {
+    Hooks.on(h, (doc) => {
+      if (!openWheel?.rendered || !openWheelActor) return;
+      const changed = doc?.documentName === "Actor" ? doc : doc?.actor ?? doc?.parent;
+      if (!changed?.id || changed.id !== openWheelActor.id) return;
+      void openWheel.refresh();
+    });
   }
 });
 //# sourceMappingURL=main.js.map

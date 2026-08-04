@@ -58,10 +58,45 @@ export class WheelApp extends AppV2 {
         this.onPick = onPick;
     }
 
+    /**
+     * 重算当前层的回调，由外部注入；**没有它就不会自动刷新**。
+     * 返回 null 表示这一层已经无内容可显示（例如角色的打击全没了）→ 关盘。
+     */
+    rebuild?: () => WheelLevel | null;
+
+    /** refresh 的合并闸，见 refresh() 的注释 */
+    #refreshQueued = false;
+
     /** 换一层内容并重绘（钻取与双向绑定都走这里） */
     async setLevel(level: WheelLevel): Promise<void> {
         this.level = level;
         await this.render(false);
+    }
+
+    /**
+     * 角色数据变了：重算当前层并重绘。轮盘＝角色卡的另一个实时视图，
+     * 靠这个方法兑现。
+     *
+     * ⚠ **必须合并**：一次拔刀会连着放出好几个文档钩子
+     * （物品的 equipped 变了 → updateItem，派生数据重算 → updateActor），
+     * 每个都直接 render 会在同一帧里重绘好几次，白闪且互相抢。
+     * 这里推迟到下一个宏任务再做，把这一串合成一次。
+     *
+     * 层结构不变时保留翻选条的下标——玩家翻到第 2 击，不该因为拔了把刀就跳回第 1 击。
+     */
+    async refresh(): Promise<void> {
+        if (!this.rebuild || this.#refreshQueued) return;
+        this.#refreshQueued = true;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        this.#refreshQueued = false;
+
+        // 等这一帧的工夫里可能已经关盘/回到上一层了
+        if (!this.rendered || !this.rebuild) return;
+
+        const next = this.rebuild();
+        if (!next) { await this.close(); return; }
+        if (this.level.variant && next.variant) next.variant.index = this.level.variant.index;
+        await this.setLevel(next);
     }
 
     // ⚠ 计划原文写的返回类型是 Promise<HTMLElement>，tsc 报 TS2740：
@@ -282,6 +317,8 @@ export class WheelApp extends AppV2 {
     }
 
     async close(options: object = {}): Promise<this> {
+        // 关了就别再自动重算：钩子还会继续放，让它们扑空即可
+        this.rebuild = undefined;
         if (this.outsideHandler) {
             document.removeEventListener("mousedown", this.outsideHandler);
             this.outsideHandler = undefined;
