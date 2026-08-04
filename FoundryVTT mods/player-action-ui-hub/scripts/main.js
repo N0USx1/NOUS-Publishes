@@ -7,9 +7,9 @@ function polar(cx, cy, r, angle) {
 }
 __name(polar, "polar");
 function sectorAngles(spec) {
-  const { index, total, gap = 0 } = spec;
-  const step = Math.PI * 2 / total;
-  const start = -Math.PI / 2 - step / 2 + index * step;
+  const { index, total, gap = 0, arcSpan = Math.PI * 2 } = spec;
+  const step = arcSpan / total;
+  const start = -Math.PI / 2 - arcSpan / 2 + index * step;
   return { a0: start + gap / 2, a1: start + step - gap / 2 };
 }
 __name(sectorAngles, "sectorAngles");
@@ -37,6 +37,33 @@ function sectorCentroid(spec) {
   return polar(cx, cy, (rOuter + rInner) / 2, (a0 + a1) / 2);
 }
 __name(sectorCentroid, "sectorCentroid");
+function capsuleCellPath(spec) {
+  const { index, total, span, rInner, rOuter, cx, cy, gap = 0 } = spec;
+  const step = span / total;
+  const start = Math.PI / 2 - span / 2 + (total - 1 - index) * step;
+  const a0 = start + gap / 2;
+  const a1 = start + step - gap / 2;
+  const o0 = polar(cx, cy, rOuter, a0);
+  const o1 = polar(cx, cy, rOuter, a1);
+  const i1 = polar(cx, cy, rInner, a1);
+  const i0 = polar(cx, cy, rInner, a0);
+  const f = /* @__PURE__ */ __name((n) => n.toFixed(2), "f");
+  return [
+    `M ${f(o0.x)} ${f(o0.y)}`,
+    `A ${rOuter} ${rOuter} 0 0 1 ${f(o1.x)} ${f(o1.y)}`,
+    `L ${f(i1.x)} ${f(i1.y)}`,
+    `A ${rInner} ${rInner} 0 0 0 ${f(i0.x)} ${f(i0.y)}`,
+    "Z"
+  ].join(" ");
+}
+__name(capsuleCellPath, "capsuleCellPath");
+function capsuleCentroid(spec) {
+  const { index, total, span, rInner, rOuter, cx, cy } = spec;
+  const step = span / total;
+  const start = Math.PI / 2 - span / 2 + (total - 1 - index) * step;
+  return polar(cx, cy, (rOuter + rInner) / 2, start + step / 2);
+}
+__name(capsuleCentroid, "capsuleCentroid");
 
 // src/text.ts
 function charWidth(ch) {
@@ -83,8 +110,11 @@ var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
 var HUB_CHARS_PER_LINE = 16;
-var VARIANT_ROW_DY = 16;
-var VARIANT_ROW_LIFT = 9;
+var GAP_ANGLE = 1.15;
+var ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
+var CAPSULE_SPAN = GAP_ANGLE - 0.16;
+var CAPSULE_R_INNER = 60;
+var CAPSULE_R_OUTER = 84;
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
@@ -163,7 +193,16 @@ var WheelApp = class extends AppV2 {
     svg.setAttribute("class", "pauih-svg");
     const total = this.level.sectors.length;
     this.level.sectors.forEach((sector, index) => {
-      const spec = { index, total, rOuter: R_OUTER, rInner: R_INNER, cx: CX, cy: CY, gap: 0.02 };
+      const spec = {
+        index,
+        total,
+        rOuter: R_OUTER,
+        rInner: R_INNER,
+        cx: CX,
+        cy: CY,
+        gap: 0.02,
+        arcSpan: ARC_SPAN
+      };
       const path = document.createElementNS(SVG_NS, "path");
       path.setAttribute("d", sectorPath(spec));
       path.setAttribute("class", `pauih-sector state-${sector.state}`);
@@ -206,11 +245,53 @@ var WheelApp = class extends AppV2 {
     hub.setAttribute("r", String(R_INNER));
     hub.setAttribute("class", "pauih-hub");
     svg.appendChild(hub);
+    this.#paintCapsule(svg);
     const hubText = document.createElementNS(SVG_NS, "g");
     hubText.setAttribute("class", "pauih-hub-text");
     svg.appendChild(hubText);
     this.#paintHub(hubText, null);
     return svg;
+  }
+  /**
+   * 画底部导航胶囊（照 Nous 2026-08-05 的 mockup）。
+   *
+   * 三格：‹ 上一项 · ↩ 返回 · › 下一项。
+   * **它是通用导航条**：上面这一层是什么，‹› 就翻什么 ——
+   * 打击层翻 MAP 三段，将来条目多到要分页时就翻页。
+   * 没得翻时箭头置灰不可点，但格子照画，免得胶囊忽宽忽窄。
+   */
+  #paintCapsule(svg) {
+    const v = this.level.variant;
+    const canCycle = !!v && v.labels.length > 1;
+    const cells = [
+      { action: "prev", glyph: "\u2039", enabled: canCycle },
+      { action: "back", glyph: "\u21A9", enabled: this.level.canGoBack },
+      { action: "next", glyph: "\u203A", enabled: canCycle }
+    ];
+    cells.forEach((cell, index) => {
+      const spec = {
+        index,
+        total: cells.length,
+        span: CAPSULE_SPAN,
+        rInner: CAPSULE_R_INNER,
+        rOuter: CAPSULE_R_OUTER,
+        cx: CX,
+        cy: CY,
+        gap: 0.035
+      };
+      const path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("d", capsuleCellPath(spec));
+      path.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
+      if (cell.enabled) path.dataset.nav = cell.action;
+      svg.appendChild(path);
+      const c = capsuleCentroid(spec);
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", String(c.x));
+      t.setAttribute("y", String(c.y));
+      t.setAttribute("class", `pauih-cap-glyph${cell.enabled ? "" : " disabled"}`);
+      t.textContent = cell.glyph;
+      svg.appendChild(t);
+    });
   }
   /**
    * 重画中心毂文字。
@@ -230,7 +311,7 @@ var WheelApp = class extends AppV2 {
       t.textContent = text;
       g.appendChild(t);
     }, "line");
-    const center = this.level.variant ? CY - VARIANT_ROW_LIFT : CY;
+    const center = CY;
     if (!sector) {
       line(this.level.title, center, "pauih-hub-title");
     } else {
@@ -245,39 +326,6 @@ var WheelApp = class extends AppV2 {
         y += lineHeight;
       }
     }
-    this.#paintVariantRow(g, sector);
-  }
-  /**
-   * 画毂底的 MAP 翻选条。**它跟着毂文字一起重画**（放在同一个 `<g>` 里），
-   * 否则悬停重填毂文字时会把它擦掉。
-   *
-   * 显示文字按**悬停的扇区**各取各的 `variantLabels`：不同武器加值不同，
-   * 全盘共用第一把的数字会让玩家看到假加值。下标则是全层共用的。
-   */
-  #paintVariantRow(g, sector) {
-    const v = this.level.variant;
-    if (!v || !v.labels.length) return;
-    const labels = sector?.variantLabels?.length ? sector.variantLabels : v.labels;
-    const y = CY + VARIANT_ROW_DY;
-    const arrow = /* @__PURE__ */ __name((dir, dx, glyph) => {
-      const t = document.createElementNS(SVG_NS, "text");
-      t.setAttribute("x", String(CX + dx));
-      t.setAttribute("y", String(y));
-      t.setAttribute("class", "pauih-variant-arrow");
-      t.textContent = glyph;
-      t.dataset.variant = dir;
-      g.appendChild(t);
-    }, "arrow");
-    const text = labels[v.index] ?? labels[0] ?? "";
-    const halfWidth = 10 + text.length * 1.6;
-    arrow("prev", -halfWidth, "\u25C0");
-    arrow("next", halfWidth, "\u25B6");
-    const row = document.createElementNS(SVG_NS, "text");
-    row.setAttribute("x", String(CX));
-    row.setAttribute("y", String(y));
-    row.setAttribute("class", "pauih-variant");
-    row.textContent = text;
-    g.appendChild(row);
   }
   /** 当前变体下标（0 = 第 1 击）；这一层没有翻选条时返回 0。 */
   currentVariantIndex() {
@@ -290,11 +338,15 @@ var WheelApp = class extends AppV2 {
   }
   #onClick = /* @__PURE__ */ __name((ev) => {
     const el = ev.target;
-    const v = this.level.variant;
-    const dir = el?.dataset?.variant;
-    if ((dir === "prev" || dir === "next") && v && v.labels.length) {
-      v.index = (v.index + (dir === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
-      void this.render(false);
+    const nav = el?.dataset?.nav;
+    if (nav) {
+      const v = this.level.variant;
+      if ((nav === "prev" || nav === "next") && v && v.labels.length) {
+        v.index = (v.index + (nav === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
+        void this.render(false);
+      } else if (nav === "back") {
+        this.onPick({ id: "__back", label: "Back", cost: null, state: "normal" }, ev);
+      }
       return;
     }
     const idx = el?.dataset?.index;
@@ -304,7 +356,7 @@ var WheelApp = class extends AppV2 {
   }, "#onClick");
   #onHover = /* @__PURE__ */ __name((ev) => {
     const el = ev.target;
-    if (el?.dataset?.variant !== void 0) return;
+    if (el?.dataset?.nav !== void 0) return;
     const idx = el?.dataset?.index;
     const g = this.element?.querySelector(".pauih-hub-text");
     if (!g) return;
@@ -446,7 +498,6 @@ __name(execAuxiliary, "execAuxiliary");
 
 // src/main.ts
 var MODULE_ID = "player-action-ui-hub";
-var BACK_SECTOR = { id: "__back", label: "\u21A9 Back", cost: null, state: "normal" };
 var lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 document.addEventListener("mousemove", (ev) => {
   lastMouse = { x: ev.clientX, y: ev.clientY };
@@ -461,7 +512,7 @@ function buildStrikeLevel(actor) {
     title: "Strikes",
     canGoBack: true,
     variant: labels.length ? { index: 0, labels } : void 0,
-    sectors: [...strikes, BACK_SECTOR]
+    sectors: strikes
   };
 }
 __name(buildStrikeLevel, "buildStrikeLevel");

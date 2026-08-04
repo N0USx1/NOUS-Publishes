@@ -67,12 +67,21 @@
     fill: var(--background, rgba(11, 10, 19, 0.9));
     stroke: var(--color-cool-4, #302831);
     stroke-width: 1.2;
+    /* SVG path 没有原生圆角；圆化拐角靠 round 的 linejoin。
+       环底缺口两端因此是圆头，与 mockup 一致。 */
+    stroke-linejoin: round;
     cursor: pointer;
     transition: fill 90ms ease-out;
 }
 
+/* 选中/悬停 = core 自己的按钮悬停色（实测 --button-hover-background-color = #c9593f，
+   即 --color-warm-2）。用它而不是自创的金色，观感与原生按钮完全一致。 */
 .pauih-sector:hover {
-    fill: color-mix(in srgb, var(--color-warm-1, #ee9b3a) 30%, var(--background, rgba(11, 10, 19, 0.9)));
+    fill: var(--button-hover-background-color, #c9593f);
+}
+/* ★ 按下反馈：压暗一档并轻微内缩，手指落下有回应（Nous 2026-08-05 要求）。 */
+.pauih-sector:active {
+    fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f));
 }
 
 /* ★ 三态（设计定档 §6.4）
@@ -177,3 +186,36 @@
     transition: fill 80ms ease-out;
 }
 .pauih-variant-arrow:hover { fill: var(--color-warm-1, #ee9b3a); }
+
+
+/* ── 底部导航胶囊（Nous 2026-08-05 mockup）─────────────
+   坐在环底缺口里，三格：‹ 上一项 · ↩ 返回 · › 下一项。
+   它是通用导航条：上面是什么内容，‹› 就翻什么。 */
+
+.pauih-cap {
+    fill: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
+    stroke: var(--color-cool-4, #302831);
+    stroke-width: 1;
+    stroke-linejoin: round;
+    cursor: pointer;
+    transition: fill 90ms ease-out;
+}
+.pauih-cap:hover { fill: var(--button-hover-background-color, #c9593f); }
+.pauih-cap:active { fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+
+/* 不可用的格子：照画，但不响应也不提示可点 —— 胶囊宽度因此恒定，不会忽宽忽窄 */
+.pauih-cap.disabled {
+    fill: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9)));
+    cursor: default;
+    pointer-events: none;
+}
+
+.pauih-cap-glyph {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 11px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;      /* 与图标同理：命中判定交给底下的格子 */
+    user-select: none;
+}
+.pauih-cap-glyph.disabled { fill: var(--color-text-subtle, #9f8475); opacity: 0.45; }

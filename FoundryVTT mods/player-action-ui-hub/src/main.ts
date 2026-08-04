@@ -2,12 +2,12 @@ import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
 import { collectStrikes } from "./collector";
 import { rollStrike, execAuxiliary } from "./executor";
-import type { SectorData, WheelLevel } from "./types";
+import type { WheelLevel } from "./types";
 
 const MODULE_ID = "player-action-ui-hub";
 
-/** 返回上一层的扇区。id 以双下划线打头，不会与真实条目的 id 撞。 */
-const BACK_SECTOR: SectorData = { id: "__back", label: "↩ Back", cost: null, state: "normal" };
+// 返回不再占一个扇区：它归底部导航胶囊管（Nous 2026-08-05 mockup）。
+// 胶囊点击时由 WheelApp 合成 id 为 "__back" 的 sector 回调，下面的分支照旧接得住。
 
 // 记录鼠标位置：轮盘以鼠标为圆心弹出，而按键呼出时事件里没有坐标。
 // ⚠ 放在模块顶层（不是 ready 内），因为 init 里注册的按键回调也要读它。
@@ -42,7 +42,7 @@ function buildStrikeLevel(actor: any): WheelLevel | null {
         title: "Strikes",
         canGoBack: true,
         variant: labels.length ? { index: 0, labels } : undefined,
-        sectors: [...strikes, BACK_SECTOR],
+        sectors: strikes,
     };
 }
 

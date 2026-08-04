@@ -1,4 +1,4 @@
-import { sectorPath, sectorCentroid } from "./geometry";
+import { sectorPath, sectorCentroid, capsuleCellPath, capsuleCentroid } from "./geometry";
 import type { WheelLevel, SectorData } from "./types";
 import { wrapText } from "./text";
 
@@ -17,10 +17,18 @@ const AppV2 = foundry.applications.api.ApplicationV2;
 /** 中心毂一行能放几个"全宽字"。毂半径 56、字号 5.2，留边后约 16。 */
 const HUB_CHARS_PER_LINE = 16;
 
-/** 变体翻选条在毂内的纵向位置（毂心下方多少）。 */
-const VARIANT_ROW_DY = 16;
-/** 有翻选条时，上方的标题/原因整块要让开的高度。 */
-const VARIANT_ROW_LIFT = 9;
+/**
+ * 环底缺口的张角（弧度）。扇区只铺 `2π - 这个值`，剩下的留给导航胶囊。
+ * 照 Nous 2026-08-05 的 mockup：环不是整圆，底下切开一块坐胶囊。
+ */
+const GAP_ANGLE = 1.15;
+/** 扇区实际占的弧长 */
+const ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
+/** 胶囊占的弧长，略小于缺口，两侧各留一点空 */
+const CAPSULE_SPAN = GAP_ANGLE - 0.16;
+/** 胶囊的径向范围：比扇区环浅一些，坐在缺口里 */
+const CAPSULE_R_INNER = 60;
+const CAPSULE_R_OUTER = 84;
 
 /** 把 v 夹在 [lo, hi] 内。窗口比轮盘还小时以 lo 为准（hi 会小于 lo）。 */
 function clamp(v: number, lo: number, hi: number): number {
@@ -110,7 +118,8 @@ export class WheelApp extends AppV2 {
 
         const total = this.level.sectors.length;
         this.level.sectors.forEach((sector, index) => {
-            const spec = { index, total, rOuter: R_OUTER, rInner: R_INNER, cx: CX, cy: CY, gap: 0.02 };
+            const spec = { index, total, rOuter: R_OUTER, rInner: R_INNER,
+                           cx: CX, cy: CY, gap: 0.02, arcSpan: ARC_SPAN };
 
             const path = document.createElementNS(SVG_NS, "path");
             path.setAttribute("d", sectorPath(spec));
@@ -163,6 +172,9 @@ export class WheelApp extends AppV2 {
         hub.setAttribute("class", "pauih-hub");
         svg.appendChild(hub);
 
+        // 底部导航胶囊：坐在环底缺口里
+        this.#paintCapsule(svg);
+
         // 中心毂文字：一个容器，内容由 #paintHub 填，悬停时重填
         const hubText = document.createElementNS(SVG_NS, "g");
         hubText.setAttribute("class", "pauih-hub-text");
@@ -170,6 +182,45 @@ export class WheelApp extends AppV2 {
         this.#paintHub(hubText, null);
 
         return svg;
+    }
+
+    /**
+     * 画底部导航胶囊（照 Nous 2026-08-05 的 mockup）。
+     *
+     * 三格：‹ 上一项 · ↩ 返回 · › 下一项。
+     * **它是通用导航条**：上面这一层是什么，‹› 就翻什么 ——
+     * 打击层翻 MAP 三段，将来条目多到要分页时就翻页。
+     * 没得翻时箭头置灰不可点，但格子照画，免得胶囊忽宽忽窄。
+     */
+    #paintCapsule(svg: SVGElement): void {
+        const v = this.level.variant;
+        const canCycle = !!v && v.labels.length > 1;
+        const cells = [
+            { action: "prev", glyph: "‹", enabled: canCycle },
+            { action: "back", glyph: "↩", enabled: this.level.canGoBack },
+            { action: "next", glyph: "›", enabled: canCycle },
+        ];
+
+        cells.forEach((cell, index) => {
+            const spec = {
+                index, total: cells.length, span: CAPSULE_SPAN,
+                rInner: CAPSULE_R_INNER, rOuter: CAPSULE_R_OUTER,
+                cx: CX, cy: CY, gap: 0.035,
+            };
+            const path = document.createElementNS(SVG_NS, "path");
+            path.setAttribute("d", capsuleCellPath(spec));
+            path.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
+            if (cell.enabled) path.dataset.nav = cell.action;
+            svg.appendChild(path);
+
+            const c = capsuleCentroid(spec);
+            const t = document.createElementNS(SVG_NS, "text");
+            t.setAttribute("x", String(c.x));
+            t.setAttribute("y", String(c.y));
+            t.setAttribute("class", `pauih-cap-glyph${cell.enabled ? "" : " disabled"}`);
+            t.textContent = cell.glyph;
+            svg.appendChild(t);
+        });
     }
 
     /**
@@ -192,8 +243,8 @@ export class WheelApp extends AppV2 {
             g.appendChild(t);
         };
 
-        // 有翻选条时，文字块整体上移让开毂底那一行
-        const center = this.level.variant ? CY - VARIANT_ROW_LIFT : CY;
+        // 翻选已移到底部胶囊里，毂文字可以正正居中
+        const center = CY;
 
         if (!sector) {
             line(this.level.title, center, "pauih-hub-title");
@@ -213,50 +264,6 @@ export class WheelApp extends AppV2 {
             }
         }
 
-        this.#paintVariantRow(g, sector);
-    }
-
-    /**
-     * 画毂底的 MAP 翻选条。**它跟着毂文字一起重画**（放在同一个 `<g>` 里），
-     * 否则悬停重填毂文字时会把它擦掉。
-     *
-     * 显示文字按**悬停的扇区**各取各的 `variantLabels`：不同武器加值不同，
-     * 全盘共用第一把的数字会让玩家看到假加值。下标则是全层共用的。
-     */
-    #paintVariantRow(g: SVGGElement, sector: SectorData | null): void {
-        const v = this.level.variant;
-        if (!v || !v.labels.length) return;
-
-        const labels = sector?.variantLabels?.length ? sector.variantLabels : v.labels;
-        const y = CY + VARIANT_ROW_DY;
-
-        // ★ 两个箭头各自成元素，才能各自有悬停反馈。
-        //   之前整行是一个 <text>、悬停时整串一起变色，鼠标在左边还是右边毫无区别，
-        //   玩家看不出点哪儿会往哪翻（Nous 2026-08-05 指出"左右键没有任何反馈"）。
-        const arrow = (dir: "prev" | "next", dx: number, glyph: string): void => {
-            const t = document.createElementNS(SVG_NS, "text");
-            t.setAttribute("x", String(CX + dx));
-            t.setAttribute("y", String(y));
-            t.setAttribute("class", "pauih-variant-arrow");
-            t.textContent = glyph;
-            t.dataset.variant = dir;
-            g.appendChild(t);
-        };
-
-        // 悬停的武器可能比全层少几段（例如只有一段），越界就退回它自己的第一段
-        const text = labels[v.index] ?? labels[0] ?? "";
-        // 箭头位置随文字长度走，别压字
-        const halfWidth = 10 + text.length * 1.6;
-
-        arrow("prev", -halfWidth, "◀");
-        arrow("next", halfWidth, "▶");
-
-        const row = document.createElementNS(SVG_NS, "text");
-        row.setAttribute("x", String(CX));
-        row.setAttribute("y", String(y));
-        row.setAttribute("class", "pauih-variant");
-        row.textContent = text;
-        g.appendChild(row);
     }
 
     /** 当前变体下标（0 = 第 1 击）；这一层没有翻选条时返回 0。 */
@@ -273,13 +280,17 @@ export class WheelApp extends AppV2 {
     #onClick = (ev: MouseEvent): void => {
         const el = ev.target as HTMLElement;
 
-        // —— 翻选箭头：各自是独立元素，点谁就往谁的方向翻（必须先于扇区判断）——
-        const v = this.level.variant;
-        const dir = el?.dataset?.variant;
-        if ((dir === "prev" || dir === "next") && v && v.labels.length) {
-            // 后退写成 +(n-1) 而不是 -1：JS 的 % 对负数返回负值，直接减会得到 -1。
-            v.index = (v.index + (dir === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
-            void this.render(false);
+        // —— 底部胶囊导航：‹ 上一项 · ↩ 返回 · › 下一项 ——
+        const nav = el?.dataset?.nav;
+        if (nav) {
+            const v = this.level.variant;
+            if ((nav === "prev" || nav === "next") && v && v.labels.length) {
+                // 后退写成 +(n-1) 而不是 -1：JS 的 % 对负数返回负值，直接减会得到 -1。
+                v.index = (v.index + (nav === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
+                void this.render(false);
+            } else if (nav === "back") {
+                this.onPick({ id: "__back", label: "Back", cost: null, state: "normal" }, ev);
+            }
             return;
         }
 
@@ -294,7 +305,7 @@ export class WheelApp extends AppV2 {
         // ⚠ 翻选条自己不触发重画：它就住在毂文字那个 <g> 里，重画会把光标脚下的
         //   节点换掉，浏览器随即再发一次 mouseover → 无限重画。
         //   （其余毂内元素都是 pointer-events:none，只有它是可点的，所以只有它有这个问题。）
-        if (el?.dataset?.variant !== undefined) return;
+        if (el?.dataset?.nav !== undefined) return;
 
         const idx = el?.dataset?.index;
         const g = this.element?.querySelector(".pauih-hub-text") as SVGGElement | null;

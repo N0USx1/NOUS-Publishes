@@ -5,6 +5,9 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM"],
     "strict": true,
+    // 未使用的变量/导入会被类型闸拦下 —— 删代码时最容易留下这类残渣
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
