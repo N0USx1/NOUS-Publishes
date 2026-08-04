@@ -1,5 +1,6 @@
 import { sectorPath, sectorCentroid } from "./geometry";
 import type { WheelLevel, SectorData } from "./types";
+import { wrapText } from "./text";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const R_OUTER = 90;
@@ -16,33 +17,6 @@ const HUB_CHARS_PER_LINE = 15;
 /** 把 v 夹在 [lo, hi] 内。窗口比轮盘还小时以 lo 为准（hi 会小于 lo）。 */
 function clamp(v: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(v, hi));
-}
-
-/** 中日韩字符（含全角标点）算 1 个宽度单位，其余算半个。 */
-function charWidth(ch: string): number {
-    return /[　-〿一-鿿＀-￯]/.test(ch) ? 1 : 0.5;
-}
-
-/**
- * 按显示宽度断行。中英混排下按字符宽度累加，超了就换行。
- * 中文没有词边界，所以逐字断；英文单词若被拆开也可接受（毂里都是短句）。
- */
-export function wrapText(text: string, maxUnits: number): string[] {
-    const lines: string[] = [];
-    let cur = "";
-    let w = 0;
-    for (const ch of text) {
-        const cw = charWidth(ch);
-        if (w + cw > maxUnits && cur) {
-            lines.push(cur);
-            cur = "";
-            w = 0;
-        }
-        cur += ch;
-        w += cw;
-    }
-    if (cur) lines.push(cur);
-    return lines;
 }
 
 export class WheelApp extends AppV2 {

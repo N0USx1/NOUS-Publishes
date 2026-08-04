@@ -38,6 +38,42 @@ function sectorCentroid(spec) {
 }
 __name(sectorCentroid, "sectorCentroid");
 
+// src/text.ts
+function charWidth(ch) {
+  return /[　-〿一-鿿＀-￯]/.test(ch) ? 1 : 0.5;
+}
+__name(charWidth, "charWidth");
+function textWidth(s) {
+  return [...s].reduce((n, c) => n + charWidth(c), 0);
+}
+__name(textWidth, "textWidth");
+function wrapText(text, maxUnits) {
+  const tokens = text.match(/[　-〿一-鿿＀-￯]|\s+|[^\s　-〿一-鿿＀-￯]+/g) ?? [];
+  const lines = [];
+  let cur = "";
+  let w = 0;
+  for (const tk of tokens) {
+    const tw = textWidth(tk);
+    if (/^\s+$/.test(tk)) {
+      if (cur) {
+        cur += tk;
+        w += tw;
+      }
+      continue;
+    }
+    if (w + tw > maxUnits && cur) {
+      lines.push(cur.trimEnd());
+      cur = "";
+      w = 0;
+    }
+    cur += tk;
+    w += tw;
+  }
+  if (cur.trim()) lines.push(cur.trimEnd());
+  return lines;
+}
+__name(wrapText, "wrapText");
+
 // src/wheel-app.ts
 var SVG_NS = "http://www.w3.org/2000/svg";
 var R_OUTER = 90;
@@ -51,28 +87,6 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
 __name(clamp, "clamp");
-function charWidth(ch) {
-  return /[　-〿一-鿿＀-￯]/.test(ch) ? 1 : 0.5;
-}
-__name(charWidth, "charWidth");
-function wrapText(text, maxUnits) {
-  const lines = [];
-  let cur = "";
-  let w = 0;
-  for (const ch of text) {
-    const cw = charWidth(ch);
-    if (w + cw > maxUnits && cur) {
-      lines.push(cur);
-      cur = "";
-      w = 0;
-    }
-    cur += ch;
-    w += cw;
-  }
-  if (cur) lines.push(cur);
-  return lines;
-}
-__name(wrapText, "wrapText");
 var WheelApp = class extends AppV2 {
   static {
     __name(this, "WheelApp");
