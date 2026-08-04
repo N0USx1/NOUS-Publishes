@@ -39,6 +39,8 @@ export function collectStrikes(actor: any): SectorData[] {
                 return {
                     id: strikeSectorId(strike, i),
                     label: String(strike.label ?? strike.slug ?? "?"),
+                    // 图标取自武器物品；有图标时扇区只画图标（见 types.ts）
+                    img: strike.item?.img ?? undefined,
                     cost: "1",
                     // 未拔出 = gated（规则上此刻确实打不了），不是 risky
                     state: ready ? "normal" : "gated",

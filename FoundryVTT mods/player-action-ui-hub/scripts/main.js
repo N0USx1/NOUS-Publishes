@@ -136,17 +136,30 @@ var WheelApp = class extends AppV2 {
       path.dataset.index = String(index);
       svg.appendChild(path);
       const c = sectorCentroid(spec);
-      const text = document.createElementNS(SVG_NS, "text");
-      text.setAttribute("x", String(c.x));
-      text.setAttribute("y", String(c.y));
-      text.setAttribute("class", "pauih-label");
-      text.textContent = sector.label;
-      text.dataset.index = String(index);
-      svg.appendChild(text);
+      if (sector.img) {
+        const size = 16;
+        const img = document.createElementNS(SVG_NS, "image");
+        img.setAttribute("href", sector.img);
+        img.setAttribute("x", String(c.x - size / 2));
+        img.setAttribute("y", String(c.y - size / 2 - (sector.badge ? 3 : 0)));
+        img.setAttribute("width", String(size));
+        img.setAttribute("height", String(size));
+        img.setAttribute("class", `pauih-icon state-${sector.state}`);
+        img.dataset.index = String(index);
+        svg.appendChild(img);
+      } else {
+        const text = document.createElementNS(SVG_NS, "text");
+        text.setAttribute("x", String(c.x));
+        text.setAttribute("y", String(c.y));
+        text.setAttribute("class", "pauih-label");
+        text.textContent = sector.label;
+        text.dataset.index = String(index);
+        svg.appendChild(text);
+      }
       if (sector.badge) {
         const badge = document.createElementNS(SVG_NS, "text");
         badge.setAttribute("x", String(c.x));
-        badge.setAttribute("y", String(c.y + 9));
+        badge.setAttribute("y", String(c.y + (sector.img ? 8 : 9)));
         badge.setAttribute("class", `pauih-badge state-${sector.state}`);
         badge.textContent = sector.badge;
         badge.dataset.index = String(index);
@@ -280,6 +293,8 @@ function collectStrikes(actor) {
       return {
         id: strikeSectorId(strike, i),
         label: String(strike.label ?? strike.slug ?? "?"),
+        // 图标取自武器物品；有图标时扇区只画图标（见 types.ts）
+        img: strike.item?.img ?? void 0,
         cost: "1",
         // 未拔出 = gated（规则上此刻确实打不了），不是 risky
         state: ready ? "normal" : "gated",

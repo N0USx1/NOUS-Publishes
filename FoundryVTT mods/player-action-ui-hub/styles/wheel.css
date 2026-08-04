@@ -89,6 +89,15 @@
 
 /* ── 扇区文字 ───────────────────────────────────────── */
 
+.pauih-icon {
+    pointer-events: auto;          /* 图标本身也要能点 */
+    cursor: pointer;
+    /* 圆角裁一下，贴合扇区的观感 */
+    clip-path: inset(0 round 2px);
+}
+.pauih-icon.state-gated { opacity: 0.42; filter: grayscale(0.7); }
+.pauih-icon.state-risky { filter: drop-shadow(0 0 2px var(--color-warm-1, #ee9b3a)); }
+
 .pauih-label {
     fill: var(--color-text-primary, #efe6d8);
     font-size: 8px;

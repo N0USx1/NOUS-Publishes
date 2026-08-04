@@ -79,18 +79,34 @@ export class WheelApp extends AppV2 {
             svg.appendChild(path);
 
             const c = sectorCentroid(spec);
-            const text = document.createElementNS(SVG_NS, "text");
-            text.setAttribute("x", String(c.x));
-            text.setAttribute("y", String(c.y));
-            text.setAttribute("class", "pauih-label");
-            text.textContent = sector.label;
-            text.dataset.index = String(index);
-            svg.appendChild(text);
+
+            if (sector.img) {
+                // ★ 有图标就**只画图标**：名字交给中心毂在悬停时显示，
+                //   长名字因此不可能压出扇区（见 types.ts 的 img 注释）。
+                const size = 16;
+                const img = document.createElementNS(SVG_NS, "image");
+                img.setAttribute("href", sector.img);
+                img.setAttribute("x", String(c.x - size / 2));
+                img.setAttribute("y", String(c.y - size / 2 - (sector.badge ? 3 : 0)));
+                img.setAttribute("width", String(size));
+                img.setAttribute("height", String(size));
+                img.setAttribute("class", `pauih-icon state-${sector.state}`);
+                img.dataset.index = String(index);
+                svg.appendChild(img);
+            } else {
+                const text = document.createElementNS(SVG_NS, "text");
+                text.setAttribute("x", String(c.x));
+                text.setAttribute("y", String(c.y));
+                text.setAttribute("class", "pauih-label");
+                text.textContent = sector.label;
+                text.dataset.index = String(index);
+                svg.appendChild(text);
+            }
 
             if (sector.badge) {
                 const badge = document.createElementNS(SVG_NS, "text");
                 badge.setAttribute("x", String(c.x));
-                badge.setAttribute("y", String(c.y + 9));
+                badge.setAttribute("y", String(c.y + (sector.img ? 8 : 9)));
                 badge.setAttribute("class", `pauih-badge state-${sector.state}`);
                 badge.textContent = sector.badge;
                 badge.dataset.index = String(index);

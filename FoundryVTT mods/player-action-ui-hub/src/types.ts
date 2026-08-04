@@ -21,6 +21,14 @@ export interface SectorData {
     reason?: string;
     /** 短提示，**直接印在扇区上**（B 档强度，不用悬停就能看见） */
     badge?: string;
+    /**
+     * 条目图标路径（如 `systems/pf2e/icons/equipment/weapons/rapier.webp`）。
+     *
+     * ★ 有图标时扇区**只画图标不画名字**，名字交给中心毂在悬停时显示
+     *   （Nous 2026-08-05 提出）。这是**结构上**避免长名字压出扇区，
+     *   而不是靠缩字号硬塞 —— "Unarmed Attack" 那种长度怎么缩都别扭。
+     */
+    img?: string;
 }
 
 /** 一层盘面。 */
