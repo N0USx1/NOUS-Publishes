@@ -63,6 +63,19 @@
     pointer-events: none;
 }
 
+/* 中心毂的原因文字。★ SVG 的 <text> 不会自动换行，
+   断行由 wheel-app.ts 的 wrapText() 做，这里只管样式。 */
+.pauih-hub-reason {
+    font-size: 5.2px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+    fill: #9a8f79;
+}
+.pauih-hub-reason.state-risky { fill: #c98f6a; }   /* 走险：琥珀偏红，与扇区角标呼应 */
+.pauih-hub-reason.state-gated { fill: #8a8070; }   /* 不满足：灰 */
+
 .pauih-hub-title {
     fill: #d8cfb4;
     font-family: Georgia, "Times New Roman", serif;

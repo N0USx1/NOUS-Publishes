@@ -10,9 +10,39 @@ const SIZE = 320;   // 窗口边长（像素）
 
 const AppV2 = foundry.applications.api.ApplicationV2;
 
+/** 中心毂一行能放几个"全宽字"。毂半径 55、字号 5.5，留边后约 15。 */
+const HUB_CHARS_PER_LINE = 15;
+
 /** 把 v 夹在 [lo, hi] 内。窗口比轮盘还小时以 lo 为准（hi 会小于 lo）。 */
 function clamp(v: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(v, hi));
+}
+
+/** 中日韩字符（含全角标点）算 1 个宽度单位，其余算半个。 */
+function charWidth(ch: string): number {
+    return /[　-〿一-鿿＀-￯]/.test(ch) ? 1 : 0.5;
+}
+
+/**
+ * 按显示宽度断行。中英混排下按字符宽度累加，超了就换行。
+ * 中文没有词边界，所以逐字断；英文单词若被拆开也可接受（毂里都是短句）。
+ */
+export function wrapText(text: string, maxUnits: number): string[] {
+    const lines: string[] = [];
+    let cur = "";
+    let w = 0;
+    for (const ch of text) {
+        const cw = charWidth(ch);
+        if (w + cw > maxUnits && cur) {
+            lines.push(cur);
+            cur = "";
+            w = 0;
+        }
+        cur += ch;
+        w += cw;
+    }
+    if (cur) lines.push(cur);
+    return lines;
 }
 
 export class WheelApp extends AppV2 {
@@ -91,14 +121,53 @@ export class WheelApp extends AppV2 {
         hub.setAttribute("class", "pauih-hub");
         svg.appendChild(hub);
 
-        const hubTitle = document.createElementNS(SVG_NS, "text");
-        hubTitle.setAttribute("x", String(CX));
-        hubTitle.setAttribute("y", String(CY));
-        hubTitle.setAttribute("class", "pauih-hub-title");
-        hubTitle.textContent = this.level.title;
-        svg.appendChild(hubTitle);
+        // 中心毂文字：一个容器，内容由 #paintHub 填，悬停时重填
+        const hubText = document.createElementNS(SVG_NS, "g");
+        hubText.setAttribute("class", "pauih-hub-text");
+        svg.appendChild(hubText);
+        this.#paintHub(hubText, null);
 
         return svg;
+    }
+
+    /**
+     * 重画中心毂文字。
+     *
+     * ⚠ SVG 的 `<text>` **没有自动换行**（不像 HTML），整句塞进去会横着冲出轮盘、
+     * 盖住扇区 —— 2026-08-04 实机就是这么翻车的。必须自己断行成多个 `<tspan>`。
+     *
+     * @param sector 悬停中的扇区；null = 没悬停，只显示层标题
+     */
+    #paintHub(g: SVGGElement, sector: SectorData | null): void {
+        g.replaceChildren();
+
+        const line = (text: string, y: number, cls: string): void => {
+            const t = document.createElementNS(SVG_NS, "text");
+            t.setAttribute("x", String(CX));
+            t.setAttribute("y", String(y));
+            t.setAttribute("class", cls);
+            t.textContent = text;
+            g.appendChild(t);
+        };
+
+        if (!sector) {
+            line(this.level.title, CY, "pauih-hub-title");
+            return;
+        }
+
+        // 有悬停：第一行项目名，下面是断好行的原因
+        const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
+        const lineHeight = 7;
+        // 整块（标题 + 原因）垂直居中于毂心
+        const blockHeight = (reasonLines.length ? reasonLines.length * lineHeight + 5 : 0);
+        let y = CY - blockHeight / 2;
+
+        line(sector.label, y, "pauih-hub-title");
+        y += 9;
+        for (const l of reasonLines) {
+            line(l, y, `pauih-hub-reason state-${sector.state}`);
+            y += lineHeight;
+        }
     }
 
     _replaceHTML(result: SVGElement, content: HTMLElement): void {
@@ -118,13 +187,10 @@ export class WheelApp extends AppV2 {
     #onHover = (ev: MouseEvent): void => {
         const el = ev.target as HTMLElement;
         const idx = el?.dataset?.index;
-        if (idx === undefined) return;
-        const sector = this.level.sectors[Number(idx)];
-        if (!sector) return;
-        const title = this.element?.querySelector(".pauih-hub-title");
-        if (title) title.textContent = sector.reason
-            ? `${sector.label} — ${sector.reason}`
-            : sector.label;
+        const g = this.element?.querySelector(".pauih-hub-text") as SVGGElement | null;
+        if (!g) return;
+        const sector = idx === undefined ? null : (this.level.sectors[Number(idx)] ?? null);
+        this.#paintHub(g, sector);
     };
 
     /**

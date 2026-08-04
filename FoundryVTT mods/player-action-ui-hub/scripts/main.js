@@ -46,10 +46,33 @@ var CX = 100;
 var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
+var HUB_CHARS_PER_LINE = 15;
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
 __name(clamp, "clamp");
+function charWidth(ch) {
+  return /[　-〿一-鿿＀-￯]/.test(ch) ? 1 : 0.5;
+}
+__name(charWidth, "charWidth");
+function wrapText(text, maxUnits) {
+  const lines = [];
+  let cur = "";
+  let w = 0;
+  for (const ch of text) {
+    const cw = charWidth(ch);
+    if (w + cw > maxUnits && cur) {
+      lines.push(cur);
+      cur = "";
+      w = 0;
+    }
+    cur += ch;
+    w += cw;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+__name(wrapText, "wrapText");
 var WheelApp = class extends AppV2 {
   static {
     __name(this, "WheelApp");
@@ -117,13 +140,44 @@ var WheelApp = class extends AppV2 {
     hub.setAttribute("r", String(R_INNER));
     hub.setAttribute("class", "pauih-hub");
     svg.appendChild(hub);
-    const hubTitle = document.createElementNS(SVG_NS, "text");
-    hubTitle.setAttribute("x", String(CX));
-    hubTitle.setAttribute("y", String(CY));
-    hubTitle.setAttribute("class", "pauih-hub-title");
-    hubTitle.textContent = this.level.title;
-    svg.appendChild(hubTitle);
+    const hubText = document.createElementNS(SVG_NS, "g");
+    hubText.setAttribute("class", "pauih-hub-text");
+    svg.appendChild(hubText);
+    this.#paintHub(hubText, null);
     return svg;
+  }
+  /**
+   * 重画中心毂文字。
+   *
+   * ⚠ SVG 的 `<text>` **没有自动换行**（不像 HTML），整句塞进去会横着冲出轮盘、
+   * 盖住扇区 —— 2026-08-04 实机就是这么翻车的。必须自己断行成多个 `<tspan>`。
+   *
+   * @param sector 悬停中的扇区；null = 没悬停，只显示层标题
+   */
+  #paintHub(g, sector) {
+    g.replaceChildren();
+    const line = /* @__PURE__ */ __name((text, y2, cls) => {
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", String(CX));
+      t.setAttribute("y", String(y2));
+      t.setAttribute("class", cls);
+      t.textContent = text;
+      g.appendChild(t);
+    }, "line");
+    if (!sector) {
+      line(this.level.title, CY, "pauih-hub-title");
+      return;
+    }
+    const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
+    const lineHeight = 7;
+    const blockHeight = reasonLines.length ? reasonLines.length * lineHeight + 5 : 0;
+    let y = CY - blockHeight / 2;
+    line(sector.label, y, "pauih-hub-title");
+    y += 9;
+    for (const l of reasonLines) {
+      line(l, y, `pauih-hub-reason state-${sector.state}`);
+      y += lineHeight;
+    }
   }
   _replaceHTML(result, content) {
     content.replaceChildren(result);
@@ -140,11 +194,10 @@ var WheelApp = class extends AppV2 {
   #onHover = /* @__PURE__ */ __name((ev) => {
     const el = ev.target;
     const idx = el?.dataset?.index;
-    if (idx === void 0) return;
-    const sector = this.level.sectors[Number(idx)];
-    if (!sector) return;
-    const title = this.element?.querySelector(".pauih-hub-title");
-    if (title) title.textContent = sector.reason ? `${sector.label} \u2014 ${sector.reason}` : sector.label;
+    const g = this.element?.querySelector(".pauih-hub-text");
+    if (!g) return;
+    const sector = idx === void 0 ? null : this.level.sectors[Number(idx)] ?? null;
+    this.#paintHub(g, sector);
   }, "#onHover");
   /**
    * 在指定屏幕坐标处弹出（**以该点为圆心**），并接管 Esc 与点击盘外关闭。
