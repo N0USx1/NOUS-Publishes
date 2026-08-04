@@ -161,18 +161,18 @@ __name(glyphs, "glyphs");
 
 // src/wheel-app.ts
 var SVG_NS = "http://www.w3.org/2000/svg";
-var R_OUTER = 90;
-var R_INNER = 56;
+var R_OUTER = 74;
+var R_INNER = 50;
 var CX = 100;
 var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
 var HUB_CHARS_PER_LINE = 16;
-var GAP_ANGLE = 1.15;
+var GAP_ANGLE = 1.05;
 var ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
-var CAPSULE_SPAN = GAP_ANGLE - 0.16;
-var CAPSULE_R_INNER = 60;
-var CAPSULE_R_OUTER = 84;
+var CAPSULE_SPAN = GAP_ANGLE + 0.3;
+var CAPSULE_R_INNER = 78;
+var CAPSULE_R_OUTER = 98;
 var IDLE_DISMISS_MS = 5e3;
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
@@ -278,7 +278,7 @@ var WheelApp = class extends AppV2 {
       svg.appendChild(path);
       const c = sectorCentroid(spec);
       if (sector.img) {
-        const size = 20;
+        const size = 18;
         const img = document.createElementNS(SVG_NS, "image");
         img.setAttribute("href", sector.img);
         img.setAttribute("x", String(c.x - size / 2));
@@ -313,6 +313,12 @@ var WheelApp = class extends AppV2 {
     hub.setAttribute("r", String(R_INNER));
     hub.setAttribute("class", "pauih-hub");
     svg.appendChild(hub);
+    const rim = document.createElementNS(SVG_NS, "circle");
+    rim.setAttribute("cx", String(CX));
+    rim.setAttribute("cy", String(CY));
+    rim.setAttribute("r", String(R_INNER));
+    rim.setAttribute("class", "pauih-rim");
+    svg.appendChild(rim);
     this.#paintCapsule(svg);
     const hubText = document.createElementNS(SVG_NS, "g");
     hubText.setAttribute("class", "pauih-hub-text");
@@ -706,7 +712,11 @@ Hooks.once("init", () => {
   game.keybindings.register(MODULE_ID, "openWheel", {
     name: "Summon Action Wheel",
     hint: "Opens the wheel at the cursor. Equivalent to Ctrl+left-click; rebind this if Ctrl+click is awkward on your setup.",
-    editable: [{ key: "KeyR" }],
+    // modifiers 显式给空数组：省略它在运行时等价
+    // （client/helpers/interaction/client-keybindings.mjs:261
+    //   `binding.modifiers = this.#validateModifiers(binding.modifiers ?? [])`），
+    // 但类型包把它标成必填，写全比开豁免干净。
+    editable: [{ key: "KeyR", modifiers: [] }],
     onDown: /* @__PURE__ */ __name(() => {
       openAt(lastMouse.x, lastMouse.y);
       return true;

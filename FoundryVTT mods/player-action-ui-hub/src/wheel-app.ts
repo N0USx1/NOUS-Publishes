@@ -4,11 +4,11 @@ import { wrapText } from "./text";
 import { glyphs } from "./economy";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const R_OUTER = 90;
-// 中心毂半径。★ 2026-08-05 演进：55 → 42（给长名字让路）→ 56（Nous：
-// 名字已改由图标承载、不再占扇区宽度，毂可以放大到贴近图标，
-// 腾出的空间留给毂内的细节，如动作经济与职业状态）。
-const R_INNER = 56;
+// 比例照 Nous 2026-08-05 的 mockup 量出来（毂/外环 ≈ 0.78，环比想象中细）
+const R_OUTER = 74;
+// 中心毂半径。★ 2026-08-05 演进：55 → 42（给长名字让路）→ 56 → 59
+// （按 mockup 实量的 0.78 比例；名字已交给毂显示，环不需要那么粗）。
+const R_INNER = 50;
 const CX = 100;
 const CY = 100;
 const SIZE = 320;   // 窗口边长（像素）
@@ -22,14 +22,18 @@ const HUB_CHARS_PER_LINE = 16;
  * 环底缺口的张角（弧度）。扇区只铺 `2π - 这个值`，剩下的留给导航胶囊。
  * 照 Nous 2026-08-05 的 mockup：环不是整圆，底下切开一块坐胶囊。
  */
-const GAP_ANGLE = 1.15;
+const GAP_ANGLE = 1.05;
 /** 扇区实际占的弧长 */
 const ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
 /** 胶囊占的弧长，略小于缺口，两侧各留一点空 */
-const CAPSULE_SPAN = GAP_ANGLE - 0.16;
-/** 胶囊的径向范围：比扇区环浅一些，坐在缺口里 */
-const CAPSULE_R_INNER = 60;
-const CAPSULE_R_OUTER = 84;
+const CAPSULE_SPAN = GAP_ANGLE + 0.30;   // 胶囊比缺口宽：它挂在环外，不必受缺口约束
+/**
+ * 胶囊的径向范围。★ **它探出环外**（外径 > R_OUTER）——
+ * mockup 里胶囊是挂在环底缺口下方的一块独立胶囊，不是嵌在环里的一格。
+ * 我最初做成了后者，比例完全不对（Nous 2026-08-05 指出）。
+ */
+const CAPSULE_R_INNER = 78;
+const CAPSULE_R_OUTER = 98;
 
 /**
  * 多久没动就自动收起（毫秒）。Nous 2026-08-05：晾着不动会挡视野。
@@ -152,7 +156,7 @@ export class WheelApp extends AppV2 {
             if (sector.img) {
                 // ★ 有图标就**只画图标**：名字交给中心毂在悬停时显示，
                 //   长名字因此不可能压出扇区（见 types.ts 的 img 注释）。
-                const size = 20;
+                const size = 18;
                 const img = document.createElementNS(SVG_NS, "image");
                 img.setAttribute("href", sector.img);
                 img.setAttribute("x", String(c.x - size / 2));
@@ -191,7 +195,16 @@ export class WheelApp extends AppV2 {
         hub.setAttribute("class", "pauih-hub");
         svg.appendChild(hub);
 
-        // 底部导航胶囊：坐在环底缺口里
+        // ★ 内圈亮色描边：mockup 里最醒目的一条，把毂和扇区环分开。
+        //   单独一个 circle 而不是给 hub 加 stroke —— 描边要压在扇区之上才不会被切断。
+        const rim = document.createElementNS(SVG_NS, "circle");
+        rim.setAttribute("cx", String(CX));
+        rim.setAttribute("cy", String(CY));
+        rim.setAttribute("r", String(R_INNER));
+        rim.setAttribute("class", "pauih-rim");
+        svg.appendChild(rim);
+
+        // 底部导航胶囊：挂在环底缺口下方，探出环外
         this.#paintCapsule(svg);
 
         // 中心毂文字：一个容器，内容由 #paintHub 填，悬停时重填

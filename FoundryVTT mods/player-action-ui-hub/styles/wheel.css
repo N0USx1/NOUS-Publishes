@@ -194,18 +194,24 @@
 
 .pauih-cap {
     fill: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
-    stroke: var(--color-cool-4, #302831);
-    stroke-width: 1;
+    /* ★ 圆头做法：同色粗描边 + round 的 linejoin。SVG path 没有原生圆角，
+       描边越粗拐角越圆 —— mockup 里胶囊是明显的圆头胶囊，不是切角梯形。 */
+    stroke: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
+    stroke-width: 5;
     stroke-linejoin: round;
     cursor: pointer;
-    transition: fill 90ms ease-out;
+    transition: fill 90ms ease-out, stroke 90ms ease-out;
 }
-.pauih-cap:hover { fill: var(--button-hover-background-color, #c9593f); }
+.pauih-cap:hover {
+    fill: var(--button-hover-background-color, #c9593f);
+    stroke: var(--button-hover-background-color, #c9593f);
+}
 .pauih-cap:active { fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
 
 /* 不可用的格子：照画，但不响应也不提示可点 —— 胶囊宽度因此恒定，不会忽宽忽窄 */
 .pauih-cap.disabled {
     fill: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9)));
+    stroke: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9)));
     cursor: default;
     pointer-events: none;
 }
@@ -252,5 +258,15 @@
     fill: var(--color-text-subtle, #9f8475);
     opacity: 0.35;
     cursor: default;
+    pointer-events: none;
+}
+
+/* 内圈亮色描边 —— mockup 里最醒目的一条，把中心毂与扇区环分开。
+   单画一个 circle 压在扇区之上，否则会被扇区的填充切断。 */
+.pauih-rim {
+    fill: none;
+    stroke: var(--color-light-2, #efe6d8);
+    stroke-width: 2;
+    opacity: 0.85;
     pointer-events: none;
 }
