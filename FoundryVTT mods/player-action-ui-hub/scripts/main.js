@@ -62,6 +62,8 @@ var WheelApp = class extends AppV2 {
   onPick;
   /** 点击盘外关闭用的监听器，记着以便解绑 */
   outsideHandler;
+  /** Esc 关闭用的监听器（Foundry 不管无框窗，见 openAt 注释），记着以便解绑 */
+  escHandler;
   constructor(level, onPick, options = {}) {
     super(options);
     this.level = level;
@@ -147,12 +149,25 @@ var WheelApp = class extends AppV2 {
     this.outsideHandler = (ev) => {
       if (!this.element?.contains(ev.target)) void this.close();
     };
-    setTimeout(() => document.addEventListener("mousedown", this.outsideHandler), 0);
+    this.escHandler = (ev) => {
+      if (ev.key !== "Escape") return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      void this.close();
+    };
+    setTimeout(() => {
+      document.addEventListener("mousedown", this.outsideHandler);
+      document.addEventListener("keydown", this.escHandler, { capture: true });
+    }, 0);
   }
   async close(options = {}) {
     if (this.outsideHandler) {
       document.removeEventListener("mousedown", this.outsideHandler);
       this.outsideHandler = void 0;
+    }
+    if (this.escHandler) {
+      document.removeEventListener("keydown", this.escHandler, { capture: true });
+      this.escHandler = void 0;
     }
     return super.close(options);
   }

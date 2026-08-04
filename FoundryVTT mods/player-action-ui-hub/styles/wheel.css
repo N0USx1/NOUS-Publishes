@@ -1,5 +1,11 @@
 /* 猎杀暗调：近黑做旧底、骨白高亮、衬线字 */
 #player-action-ui-hub-wheel {
+    /* ★ 无框窗（window.frame:false）拿不到 AppV2 给带框窗的定位样式，
+       默认是 position:static —— 那样 setPosition 写进内联的 left/top 会被完全无视，
+       轮盘会按文档流跑到角落。实测 2026-08-04 就是这么翻车的，必须自己声明。 */
+    position: absolute;
+    z-index: var(--z-index-app, 100);
+
     background: none;
     border: none;
     box-shadow: none;

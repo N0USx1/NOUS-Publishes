@@ -24,6 +24,8 @@ export class WheelApp extends AppV2 {
     private onPick: (sector: SectorData) => void;
     /** 点击盘外关闭用的监听器，记着以便解绑 */
     private outsideHandler?: (ev: MouseEvent) => void;
+    /** Esc 关闭用的监听器（Foundry 不管无框窗，见 openAt 注释），记着以便解绑 */
+    private escHandler?: (ev: KeyboardEvent) => void;
 
     constructor(level: WheelLevel, onPick: (s: SectorData) => void, options: object = {}) {
         super(options);
@@ -128,14 +130,33 @@ export class WheelApp extends AppV2 {
         this.outsideHandler = (ev: MouseEvent) => {
             if (!this.element?.contains(ev.target as Node)) void this.close();
         };
+        // ★ Esc 必须自己接管，不能指望 Foundry。
+        //   实读 client/helpers/interaction/client-keybindings.mjs:754-756：
+        //   Esc 遍历 foundry.applications.instances 时有一道 `if (app.hasFrame)` 门槛，
+        //   而我们是无框窗（window.frame:false）→ hasFrame 为假 → Foundry 永远不会关我们。
+        //   （2026-08-04 实测确认：不挂这个监听，Esc 对轮盘完全无效。）
+        this.escHandler = (ev: KeyboardEvent) => {
+            if (ev.key !== "Escape") return;
+            ev.preventDefault();
+            ev.stopPropagation();     // 别让 Esc 继续冒泡去开主菜单
+            void this.close();
+        };
+
         // 延后一帧挂载，避免呼出那一次点击立刻把自己关掉
-        setTimeout(() => document.addEventListener("mousedown", this.outsideHandler!), 0);
+        setTimeout(() => {
+            document.addEventListener("mousedown", this.outsideHandler!);
+            document.addEventListener("keydown", this.escHandler!, { capture: true });
+        }, 0);
     }
 
     async close(options: object = {}): Promise<this> {
         if (this.outsideHandler) {
             document.removeEventListener("mousedown", this.outsideHandler);
             this.outsideHandler = undefined;
+        }
+        if (this.escHandler) {
+            document.removeEventListener("keydown", this.escHandler, { capture: true });
+            this.escHandler = undefined;
         }
         return super.close(options) as Promise<this>;
     }
