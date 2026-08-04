@@ -256,7 +256,7 @@ var openWheel = null;
 function openAt(x, y) {
   const actor = resolveActor();
   if (!actor) {
-    ui.notifications.warn("\u6CA1\u6709\u53EF\u64CD\u4F5C\u7684\u89D2\u8272\uFF1A\u8BF7\u5148\u9009\u4E2D\u4F60\u7684 token");
+    ui.notifications.warn("Player Action UI Hub: no character to act with \u2014 select your token first.");
     return;
   }
   openWheel?.close();
@@ -264,10 +264,10 @@ function openAt(x, y) {
     title: actor.name,
     canGoBack: false,
     sectors: [
-      { id: "strikes", label: "\u6253\u51FB", cost: null, state: "normal" },
-      { id: "actions", label: "\u52A8\u4F5C", cost: null, state: "normal" },
-      { id: "class", label: "\u804C\u4E1A", cost: null, state: "normal" },
-      { id: "spells", label: "\u6CD5\u672F", cost: null, state: "normal" }
+      { id: "strikes", label: "Strikes", cost: null, state: "normal" },
+      { id: "actions", label: "Actions", cost: null, state: "normal" },
+      { id: "class", label: "Class", cost: null, state: "normal" },
+      { id: "spells", label: "Spells", cost: null, state: "normal" }
     ]
   };
   openWheel = new WheelApp(level, (s) => {
@@ -279,8 +279,8 @@ __name(openAt, "openAt");
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | init`);
   game.keybindings.register(MODULE_ID, "openWheel", {
-    name: "\u547C\u51FA\u52A8\u4F5C\u8F6E\u76D8",
-    hint: "\u5728\u9F20\u6807\u4F4D\u7F6E\u5F39\u51FA\u8F6E\u76D8\u3002\u4E0E Ctrl+\u5DE6\u952E\u7B49\u6548\uFF0C\u4F9B\u4E0D\u4FBF\u4F7F\u7528 Ctrl+\u70B9\u51FB\u7684\u73A9\u5BB6\u6539\u7ED1\u3002",
+    name: "Summon Action Wheel",
+    hint: "Opens the wheel at the cursor. Equivalent to Ctrl+left-click; rebind this if Ctrl+click is awkward on your setup.",
     editable: [{ key: "KeyR" }],
     onDown: /* @__PURE__ */ __name(() => {
       openAt(lastMouse.x, lastMouse.y);
@@ -296,28 +296,28 @@ Hooks.once("ready", () => {
     "color:#c9a959;font-weight:bold"
   );
   const demoLevel = {
-    title: "\u6253  \u51FB",
+    title: "Strikes",
     canGoBack: false,
     sectors: [
-      { id: "a", label: "\u957F\u5251", cost: "1", state: "normal" },
-      { id: "b", label: "\u77ED\u5F13", cost: "1", state: "normal" },
-      // 走险：亮度不变，只有琥珀描边与角标
+      { id: "a", label: "Longsword", cost: "1", state: "normal" },
+      { id: "b", label: "Shortbow", cost: "1", state: "normal" },
+      // risky：亮度不变，只有琥珀描边与角标
       {
         id: "c",
-        label: "\u6CD5\u672F\u98DE\u5F39",
+        label: "Magic Missile",
         cost: "2",
         state: "risky",
-        reason: "\u8FDF\u949D 2\uFF1A\u65BD\u6CD5\u9700\u901A\u8FC7 DC 7 \u5E73\u9AB0\uFF0C\u5426\u5219\u6CD5\u672F\u4E2D\u65AD",
-        badge: "\u26A0 \u5E73\u9AB0 DC7"
+        reason: "Stupefied 2: casting requires a DC 7 flat check or the spell is disrupted.",
+        badge: "\u26A0 Flat DC 7"
       },
-      // 不满足：变暗
+      // gated：变暗
       {
         id: "d",
-        label: "\u5315\u9996",
+        label: "Dagger",
         cost: "1",
         state: "gated",
-        reason: "\u672A\u62D4\u51FA\uFF0C\u5148\u82B1 \u25C6 \u62D4\u51FA\u6B66\u5668",
-        badge: "\u25C6 \u62D4\u51FA"
+        reason: "Not drawn \u2014 spend \u25C6 to draw it first.",
+        badge: "\u25C6 Draw"
       }
     ]
   };

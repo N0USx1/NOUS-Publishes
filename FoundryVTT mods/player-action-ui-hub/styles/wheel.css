@@ -12,28 +12,61 @@
     pointer-events: none;          /* 窗口本身不吃事件，只有 SVG 吃 */
 }
 
+/* 毛玻璃底：轮盘后面的画面模糊掉，扇区文字才读得清。
+   用伪元素画一个圆盘垫在 SVG 之下 —— backdrop-filter 加在 SVG 元素上
+   浏览器支持很差，垫一层普通 div/伪元素才稳。
+
+   ★ 参数照抄 Foundry 原生窗体，不自创（2026-08-04 实测量得）：
+     原生 .application .window-content → backdrop-filter: blur(4px)，仅此一项，
+     无饱和度/亮度调整；原生窗体投影 = 0 0 10px black。
+     我最初凭感觉写的 blur(7px)+saturate+brightness 与原生不符，已改齐。 */
+#player-action-ui-hub-wheel::before {
+    content: "";
+    position: absolute;
+    inset: 4%;
+    border-radius: 50%;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 0 10px black;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* 无障碍：跟随原生对"减少透明度"偏好的处理（foundry2.css:7160 起同款）。 */
+@media (prefers-reduced-transparency) {
+    #player-action-ui-hub-wheel::before {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+    .pauih-sector { fill: rgb(23, 20, 15); }
+    .pauih-hub { fill: rgb(11, 9, 6); }
+}
+
 #player-action-ui-hub-wheel .pauih-svg {
+    position: relative;
+    z-index: 1;                    /* 压在毛玻璃之上 */
     width: 100%;
     height: 100%;
     pointer-events: auto;
-    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.7));
 }
 
 .pauih-sector {
-    fill: #17140f;
+    /* ★ 半透明是有意的：底下垫着 backdrop-filter 毛玻璃，
+       填充不透明就把模糊完全挡住了，看不出玻璃感。 */
+    fill: rgba(23, 20, 15, 0.90);
     stroke: #6b5d45;
     stroke-width: 1.2;
     cursor: pointer;
     transition: fill 90ms ease-out;
 }
-.pauih-sector:hover { fill: #e6dfc8; }
+.pauih-sector:hover { fill: rgba(230, 223, 200, 0.94); }
 
 /* ★ 三态（设计定档 §6.4）
    risky = 可以做但有代价 → **亮度不变**，只换描边成琥珀色。
            变暗会被读成"不该做"，那是把规则简化错了。
    gated = 规则上此刻用不了 → 变暗。仍可点击。 */
 .pauih-sector.state-risky { stroke: #b8863a; stroke-width: 1.6; }
-.pauih-sector.state-gated { fill: #14120e; stroke: #4a4233; }
+.pauih-sector.state-gated { fill: rgba(16, 14, 11, 0.90); stroke: #4a4233; }
 
 .pauih-label {
     fill: #c9bda0;
@@ -57,7 +90,7 @@
 .pauih-badge.state-gated { fill: #7a6f5c; }   /* 灰：不满足 */
 
 .pauih-hub {
-    fill: #0b0906;
+    fill: rgba(11, 9, 6, 0.90);
     stroke: #4a3f2e;
     stroke-width: 1.5;
     pointer-events: none;

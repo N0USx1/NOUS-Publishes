@@ -18,7 +18,7 @@ let openWheel: WheelApp | null = null;
 function openAt(x: number, y: number): void {
     const actor = resolveActor();
     if (!actor) {
-        ui.notifications.warn("没有可操作的角色：请先选中你的 token");
+        ui.notifications.warn("Player Action UI Hub: no character to act with — select your token first.");
         return;
     }
     openWheel?.close();
@@ -26,10 +26,10 @@ function openAt(x: number, y: number): void {
         title: actor.name,
         canGoBack: false,
         sectors: [
-            { id: "strikes", label: "打击", cost: null, state: "normal" },
-            { id: "actions", label: "动作", cost: null, state: "normal" },
-            { id: "class",   label: "职业", cost: null, state: "normal" },
-            { id: "spells",  label: "法术", cost: null, state: "normal" },
+            { id: "strikes", label: "Strikes", cost: null, state: "normal" },
+            { id: "actions", label: "Actions", cost: null, state: "normal" },
+            { id: "class",   label: "Class",   cost: null, state: "normal" },
+            { id: "spells",  label: "Spells",  cost: null, state: "normal" },
         ],
     };
     openWheel = new WheelApp(level, (s) => {
@@ -43,8 +43,8 @@ Hooks.once("init", () => {
 
     // 可改绑按键：浏览器/Mac 玩家的逃生口，与 Ctrl+左键等效。
     game.keybindings.register(MODULE_ID, "openWheel", {
-        name: "呼出动作轮盘",
-        hint: "在鼠标位置弹出轮盘。与 Ctrl+左键等效，供不便使用 Ctrl+点击的玩家改绑。",
+        name: "Summon Action Wheel",
+        hint: "Opens the wheel at the cursor. Equivalent to Ctrl+left-click; rebind this if Ctrl+click is awkward on your setup.",
         editable: [{ key: "KeyR" }],
         onDown: () => {
             // ⚠ 不用 `window.event`（遗留 API，不可靠）：坐标取自模块顶层
@@ -63,17 +63,18 @@ Hooks.once("ready", () => {
 
     // 临时调试入口：控制台执行 pauih.demo() 弹出示例轮盘
     const demoLevel: WheelLevel = {
-        title: "打  击",
+        title: "Strikes",
         canGoBack: false,
         sectors: [
-            { id: "a", label: "长剑", cost: "1", state: "normal" },
-            { id: "b", label: "短弓", cost: "1", state: "normal" },
-            // 走险：亮度不变，只有琥珀描边与角标
-            { id: "c", label: "法术飞弹", cost: "2", state: "risky",
-              reason: "迟钝 2：施法需通过 DC 7 平骰，否则法术中断", badge: "⚠ 平骰 DC7" },
-            // 不满足：变暗
-            { id: "d", label: "匕首", cost: "1", state: "gated",
-              reason: "未拔出，先花 ◆ 拔出武器", badge: "◆ 拔出" },
+            { id: "a", label: "Longsword", cost: "1", state: "normal" },
+            { id: "b", label: "Shortbow", cost: "1", state: "normal" },
+            // risky：亮度不变，只有琥珀描边与角标
+            { id: "c", label: "Magic Missile", cost: "2", state: "risky",
+              reason: "Stupefied 2: casting requires a DC 7 flat check or the spell is disrupted.",
+              badge: "⚠ Flat DC 7" },
+            // gated：变暗
+            { id: "d", label: "Dagger", cost: "1", state: "gated",
+              reason: "Not drawn — spend ◆ to draw it first.", badge: "◆ Draw" },
         ],
     };
 
