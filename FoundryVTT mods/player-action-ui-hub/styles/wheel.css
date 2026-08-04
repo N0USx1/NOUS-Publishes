@@ -1,1 +1,69 @@
-/* 猎杀暗调，Task 3 填充 */
+/* 猎杀暗调：近黑做旧底、骨白高亮、衬线字 */
+#player-action-ui-hub-wheel {
+    background: none;
+    border: none;
+    box-shadow: none;
+    pointer-events: none;          /* 窗口本身不吃事件，只有 SVG 吃 */
+}
+
+#player-action-ui-hub-wheel .pauih-svg {
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.7));
+}
+
+.pauih-sector {
+    fill: #17140f;
+    stroke: #6b5d45;
+    stroke-width: 1.2;
+    cursor: pointer;
+    transition: fill 90ms ease-out;
+}
+.pauih-sector:hover { fill: #e6dfc8; }
+
+/* ★ 三态（设计定档 §6.4）
+   risky = 可以做但有代价 → **亮度不变**，只换描边成琥珀色。
+           变暗会被读成"不该做"，那是把规则简化错了。
+   gated = 规则上此刻用不了 → 变暗。仍可点击。 */
+.pauih-sector.state-risky { stroke: #b8863a; stroke-width: 1.6; }
+.pauih-sector.state-gated { fill: #14120e; stroke: #4a4233; }
+
+.pauih-label {
+    fill: #c9bda0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 8px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+}
+.pauih-sector:hover + .pauih-label { fill: #1a1610; }
+.pauih-sector.state-gated ~ .pauih-label { fill: #5d5548; }
+
+.pauih-badge {
+    font-size: 5px;
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+}
+.pauih-badge.state-risky { fill: #d9a441; }   /* 琥珀：走险 */
+.pauih-badge.state-gated { fill: #7a6f5c; }   /* 灰：不满足 */
+
+.pauih-hub {
+    fill: #0b0906;
+    stroke: #4a3f2e;
+    stroke-width: 1.5;
+    pointer-events: none;
+}
+
+.pauih-hub-title {
+    fill: #d8cfb4;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+}
