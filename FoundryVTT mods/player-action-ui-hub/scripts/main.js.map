@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/main.ts"],
+  "sourcesContent": ["const MODULE_ID = \"player-action-ui-hub\";\n\nHooks.once(\"init\", () => {\n    console.log(`${MODULE_ID} | init`);\n});\n\nHooks.once(\"ready\", () => {\n    const mod = (game as any).modules.get(MODULE_ID);\n    console.log(`%c${MODULE_ID} | ready | v${mod?.version ?? \"?\"}`,\n                \"color:#c9a959;font-weight:bold\");\n});\n"],
+  "mappings": ";AAAA,IAAM,YAAY;AAElB,MAAM,KAAK,QAAQ,MAAM;AACrB,UAAQ,IAAI,GAAG,SAAS,SAAS;AACrC,CAAC;AAED,MAAM,KAAK,SAAS,MAAM;AACtB,QAAM,MAAO,KAAa,QAAQ,IAAI,SAAS;AAC/C,UAAQ;AAAA,IAAI,KAAK,SAAS,eAAe,KAAK,WAAW,GAAG;AAAA,IAChD;AAAA,EAAgC;AAChD,CAAC;",
+  "names": []
+}

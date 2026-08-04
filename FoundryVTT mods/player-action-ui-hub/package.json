@@ -1,0 +1,18 @@
+{
+  "name": "player-action-ui-hub",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --format=esm --keep-names --sourcemap --outfile=scripts/main.js",
+    "watch": "esbuild src/main.ts --bundle --format=esm --keep-names --sourcemap --outfile=scripts/main.js --watch",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "guard": "npm run check && npm run build && npm run test"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.0"
+  }
+}
