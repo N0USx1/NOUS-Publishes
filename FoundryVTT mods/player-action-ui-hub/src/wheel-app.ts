@@ -1,6 +1,7 @@
 import { sectorPath, sectorCentroid, capsuleCellPath, capsuleCentroid } from "./geometry";
 import type { WheelLevel, SectorData } from "./types";
 import { wrapText } from "./text";
+import { glyphs } from "./economy";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const R_OUTER = 90;
@@ -75,6 +76,15 @@ export class WheelApp extends AppV2 {
 
     /** refresh 的合并闸，见 refresh() 的注释 */
     #refreshQueued = false;
+
+    /**
+     * 取动作经济现状的回调，由外部注入。
+     * **不在战斗中要返回 null** —— 战斗外没有"回合"，画 ◆◆◇ 是假信息。
+     */
+    economy?: () => { remaining: number; canUndo: boolean } | null;
+
+    /** 点了撤回时调用，由外部注入（真正的记账退还在外面做）。 */
+    onUndo?: () => void;
 
     /** 换一层内容并重绘（钻取与双向绑定都走这里） */
     async setLevel(level: WheelLevel): Promise<void> {
@@ -264,6 +274,41 @@ export class WheelApp extends AppV2 {
             }
         }
 
+        this.#paintEconomy(g);
+    }
+
+    /**
+     * 毂底的动作经济行：三个菱形 + 一个红色 « 撤回（Nous 2026-08-05 定的形态）。
+     *
+     * ★ **系统不记这件事**，这是我们自己的账（见 economy.ts 顶部）；
+     *   **只显示不阻止**，余额为负也照实画出来。
+     * ⚠ 撤回退的是**动作点记账**，不是把骰子收回来 —— 已经进聊天栏的收不回。
+     */
+    #paintEconomy(g: SVGGElement): void {
+        const econ = this.economy?.();
+        if (!econ) return;                     // 不在战斗中：没有回合，画点数是假信息
+
+        const y = CY + 27;
+        const pipDx = 8;
+        const pips = glyphs(econ.remaining);
+        const startX = CX - ((pips.length - 1) * pipDx) / 2 - 7;
+
+        [...pips].forEach((ch, i) => {
+            const t = document.createElementNS(SVG_NS, "text");
+            t.setAttribute("x", String(startX + i * pipDx));
+            t.setAttribute("y", String(y));
+            t.setAttribute("class", `pauih-pip${ch === "◆" ? " full" : ch === "✕" ? " over" : ""}`);
+            t.textContent = ch;
+            g.appendChild(t);
+        });
+
+        const undo = document.createElementNS(SVG_NS, "text");
+        undo.setAttribute("x", String(startX + pips.length * pipDx + 3));
+        undo.setAttribute("y", String(y));
+        undo.setAttribute("class", `pauih-undo${econ.canUndo ? "" : " disabled"}`);
+        undo.textContent = "«";
+        if (econ.canUndo) undo.dataset.nav = "undo";
+        g.appendChild(undo);
     }
 
     /** 当前变体下标（0 = 第 1 击）；这一层没有翻选条时返回 0。 */
@@ -287,6 +332,9 @@ export class WheelApp extends AppV2 {
             if ((nav === "prev" || nav === "next") && v && v.labels.length) {
                 // 后退写成 +(n-1) 而不是 -1：JS 的 % 对负数返回负值，直接减会得到 -1。
                 v.index = (v.index + (nav === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
+                void this.render(false);
+            } else if (nav === "undo") {
+                this.onUndo?.();
                 void this.render(false);
             } else if (nav === "back") {
                 this.onPick({ id: "__back", label: "Back", cost: null, state: "normal" }, ev);

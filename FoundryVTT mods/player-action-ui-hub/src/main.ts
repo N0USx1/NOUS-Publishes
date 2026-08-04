@@ -2,6 +2,7 @@ import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
 import { collectStrikes } from "./collector";
 import { rollStrike, execAuxiliary } from "./executor";
+import * as economy from "./economy";
 import type { WheelLevel } from "./types";
 
 const MODULE_ID = "player-action-ui-hub";
@@ -15,6 +16,17 @@ let lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 document.addEventListener("mousemove", (ev) => {
     lastMouse = { x: ev.clientX, y: ev.clientY };
 });
+
+/**
+ * 当前是第几轮；不在战斗中返回 null。
+ * ★ 战斗外没有"回合"这回事，动作经济那一行就不该画（画了是假信息）。
+ */
+function currentRound(actor: any): number | null {
+    const combat = game.combat;
+    if (!combat?.started) return null;
+    const inIt = combat.combatants?.some((c: any) => c.actor?.id === actor?.id);
+    return inIt ? (combat.round ?? null) : null;
+}
 
 /** 当前打开的轮盘；同一时刻只允许一个 */
 let openWheel: WheelApp | null = null;
@@ -102,6 +114,9 @@ function openAt(x: number, y: number): void {
                 // 打第几击由毂底的翻选条决定（没有翻选条时是 0 = 第 1 击）。
                 // ★ ev 是真实点击事件，必须一路传到 executor（它再翻成意图事件）。
                 const map = openWheel!.currentVariantIndex();
+                // 记账：花掉这次打击的动作点（★只记不拦，见 economy.ts）
+                const round = currentRound(actor);
+                if (round !== null) economy.spend(actor.id, round, economy.costToPoints(s.cost));
                 void rollStrike(actor, s.id, map, ev).then(() => openWheel?.close());
             }
             return;
@@ -109,6 +124,15 @@ function openAt(x: number, y: number): void {
 
         ui.notifications.info(`"${s.label}" is not implemented yet.`);
     });
+    openWheel.economy = () => {
+        const round = currentRound(actor);
+        if (round === null) return null;
+        return { remaining: economy.remaining(actor.id, round), canUndo: economy.canUndo(actor.id, round) };
+    };
+    openWheel.onUndo = () => {
+        const round = currentRound(actor);
+        if (round !== null) economy.undoLast(actor.id, round);
+    };
     void openWheel.openAt(x, y);
 }
 

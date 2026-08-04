@@ -101,6 +101,64 @@ function wrapText(text, maxUnits) {
 }
 __name(wrapText, "wrapText");
 
+// src/economy.ts
+var ACTIONS_PER_TURN = 3;
+var ledgers = /* @__PURE__ */ new Map();
+function costToPoints(cost) {
+  switch (cost) {
+    case "1":
+      return 1;
+    case "2":
+      return 2;
+    case "3":
+      return 3;
+    default:
+      return 0;
+  }
+}
+__name(costToPoints, "costToPoints");
+function ledgerFor(actorId, round) {
+  const cur = ledgers.get(actorId);
+  if (!cur || cur.round !== round) {
+    const fresh = { spent: 0, round, history: [] };
+    ledgers.set(actorId, fresh);
+    return fresh;
+  }
+  return cur;
+}
+__name(ledgerFor, "ledgerFor");
+function remaining(actorId, round) {
+  return ACTIONS_PER_TURN - ledgerFor(actorId, round).spent;
+}
+__name(remaining, "remaining");
+function spend(actorId, round, n) {
+  if (n <= 0) return;
+  const l = ledgerFor(actorId, round);
+  l.spent += n;
+  l.history.push(n);
+}
+__name(spend, "spend");
+function undoLast(actorId, round) {
+  const l = ledgerFor(actorId, round);
+  const last = l.history.pop();
+  if (last === void 0) return 0;
+  l.spent = Math.max(0, l.spent - last);
+  return last;
+}
+__name(undoLast, "undoLast");
+function canUndo(actorId, round) {
+  return ledgerFor(actorId, round).history.length > 0;
+}
+__name(canUndo, "canUndo");
+function glyphs(remainingCount) {
+  if (remainingCount >= 0) {
+    const left = Math.min(remainingCount, ACTIONS_PER_TURN);
+    return "\u25C6".repeat(left) + "\u25C7".repeat(ACTIONS_PER_TURN - left);
+  }
+  return "\u25C7".repeat(ACTIONS_PER_TURN) + "\u2715".repeat(Math.min(-remainingCount, 3));
+}
+__name(glyphs, "glyphs");
+
 // src/wheel-app.ts
 var SVG_NS = "http://www.w3.org/2000/svg";
 var R_OUTER = 90;
@@ -154,6 +212,13 @@ var WheelApp = class extends AppV2 {
   rebuild;
   /** refresh 的合并闸，见 refresh() 的注释 */
   #refreshQueued = false;
+  /**
+   * 取动作经济现状的回调，由外部注入。
+   * **不在战斗中要返回 null** —— 战斗外没有"回合"，画 ◆◆◇ 是假信息。
+   */
+  economy;
+  /** 点了撤回时调用，由外部注入（真正的记账退还在外面做）。 */
+  onUndo;
   /** 换一层内容并重绘（钻取与双向绑定都走这里） */
   async setLevel(level) {
     this.level = level;
@@ -326,6 +391,37 @@ var WheelApp = class extends AppV2 {
         y += lineHeight;
       }
     }
+    this.#paintEconomy(g);
+  }
+  /**
+   * 毂底的动作经济行：三个菱形 + 一个红色 « 撤回（Nous 2026-08-05 定的形态）。
+   *
+   * ★ **系统不记这件事**，这是我们自己的账（见 economy.ts 顶部）；
+   *   **只显示不阻止**，余额为负也照实画出来。
+   * ⚠ 撤回退的是**动作点记账**，不是把骰子收回来 —— 已经进聊天栏的收不回。
+   */
+  #paintEconomy(g) {
+    const econ = this.economy?.();
+    if (!econ) return;
+    const y = CY + 27;
+    const pipDx = 8;
+    const pips = glyphs(econ.remaining);
+    const startX = CX - (pips.length - 1) * pipDx / 2 - 7;
+    [...pips].forEach((ch, i) => {
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", String(startX + i * pipDx));
+      t.setAttribute("y", String(y));
+      t.setAttribute("class", `pauih-pip${ch === "\u25C6" ? " full" : ch === "\u2715" ? " over" : ""}`);
+      t.textContent = ch;
+      g.appendChild(t);
+    });
+    const undo = document.createElementNS(SVG_NS, "text");
+    undo.setAttribute("x", String(startX + pips.length * pipDx + 3));
+    undo.setAttribute("y", String(y));
+    undo.setAttribute("class", `pauih-undo${econ.canUndo ? "" : " disabled"}`);
+    undo.textContent = "\xAB";
+    if (econ.canUndo) undo.dataset.nav = "undo";
+    g.appendChild(undo);
   }
   /** 当前变体下标（0 = 第 1 击）；这一层没有翻选条时返回 0。 */
   currentVariantIndex() {
@@ -343,6 +439,9 @@ var WheelApp = class extends AppV2 {
       const v = this.level.variant;
       if ((nav === "prev" || nav === "next") && v && v.labels.length) {
         v.index = (v.index + (nav === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
+        void this.render(false);
+      } else if (nav === "undo") {
+        this.onUndo?.();
         void this.render(false);
       } else if (nav === "back") {
         this.onPick({ id: "__back", label: "Back", cost: null, state: "normal" }, ev);
@@ -502,6 +601,13 @@ var lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 document.addEventListener("mousemove", (ev) => {
   lastMouse = { x: ev.clientX, y: ev.clientY };
 });
+function currentRound(actor) {
+  const combat = game.combat;
+  if (!combat?.started) return null;
+  const inIt = combat.combatants?.some((c) => c.actor?.id === actor?.id);
+  return inIt ? combat.round ?? null : null;
+}
+__name(currentRound, "currentRound");
 var openWheel = null;
 var openWheelActor = null;
 function buildStrikeLevel(actor) {
@@ -555,12 +661,23 @@ function openAt(x, y) {
         void execAuxiliary(actor, s.id, 0);
       } else {
         const map = openWheel.currentVariantIndex();
+        const round = currentRound(actor);
+        if (round !== null) spend(actor.id, round, costToPoints(s.cost));
         void rollStrike(actor, s.id, map, ev).then(() => openWheel?.close());
       }
       return;
     }
     ui.notifications.info(`"${s.label}" is not implemented yet.`);
   });
+  openWheel.economy = () => {
+    const round = currentRound(actor);
+    if (round === null) return null;
+    return { remaining: remaining(actor.id, round), canUndo: canUndo(actor.id, round) };
+  };
+  openWheel.onUndo = () => {
+    const round = currentRound(actor);
+    if (round !== null) undoLast(actor.id, round);
+  };
   void openWheel.openAt(x, y);
 }
 __name(openAt, "openAt");

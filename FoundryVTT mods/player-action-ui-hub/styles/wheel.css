@@ -219,3 +219,38 @@
     user-select: none;
 }
 .pauih-cap-glyph.disabled { fill: var(--color-text-subtle, #9f8475); opacity: 0.45; }
+
+/* ── 毂底动作经济行：三个菱形 + 红色 « 撤回 ────────────
+   ★ 系统不记动作经济，这是我们自己的账；只显示不阻止。
+   ⚠ 撤回退的是记账，不是把骰子收回来。 */
+
+.pauih-pip {
+    font-size: 9px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+    fill: var(--color-text-subtle, #9f8475);   /* 用掉的：空心暗色 */
+}
+.pauih-pip.full { fill: var(--color-text-primary, #efe6d8); }   /* 还剩的：亮 */
+.pauih-pip.over { fill: var(--color-warm-2, #c9593f); }         /* 超支：警示色 */
+
+.pauih-undo {
+    font-size: 10px;
+    font-weight: bold;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: var(--color-warm-2, #c9593f);
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+    transition: fill 80ms ease-out;
+}
+.pauih-undo:hover { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-undo:active { fill: color-mix(in srgb, black 25%, var(--color-warm-2, #c9593f)); }
+.pauih-undo.disabled {
+    fill: var(--color-text-subtle, #9f8475);
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
