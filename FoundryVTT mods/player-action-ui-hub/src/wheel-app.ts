@@ -16,6 +16,11 @@ const AppV2 = foundry.applications.api.ApplicationV2;
 /** 中心毂一行能放几个"全宽字"。毂半径 42、字号 5.2，留边后约 12。 */
 const HUB_CHARS_PER_LINE = 12;
 
+/** 变体翻选条在毂内的纵向位置（毂心下方多少）。 */
+const VARIANT_ROW_DY = 16;
+/** 有翻选条时，上方的标题/原因整块要让开的高度。 */
+const VARIANT_ROW_LIFT = 9;
+
 /** 把 v 夹在 [lo, hi] 内。窗口比轮盘还小时以 lo 为准（hi 会小于 lo）。 */
 function clamp(v: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(v, hi));
@@ -151,24 +156,55 @@ export class WheelApp extends AppV2 {
             g.appendChild(t);
         };
 
+        // 有翻选条时，文字块整体上移让开毂底那一行
+        const center = this.level.variant ? CY - VARIANT_ROW_LIFT : CY;
+
         if (!sector) {
-            line(this.level.title, CY, "pauih-hub-title");
-            return;
+            line(this.level.title, center, "pauih-hub-title");
+        } else {
+            // 有悬停：第一行项目名，下面是断好行的原因
+            const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
+            const lineHeight = 7;
+            // 整块（标题 + 原因）垂直居中于 center
+            const blockHeight = (reasonLines.length ? reasonLines.length * lineHeight + 5 : 0);
+            let y = center - blockHeight / 2;
+
+            line(sector.label, y, "pauih-hub-title");
+            y += 9;
+            for (const l of reasonLines) {
+                line(l, y, `pauih-hub-reason state-${sector.state}`);
+                y += lineHeight;
+            }
         }
 
-        // 有悬停：第一行项目名，下面是断好行的原因
-        const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
-        const lineHeight = 7;
-        // 整块（标题 + 原因）垂直居中于毂心
-        const blockHeight = (reasonLines.length ? reasonLines.length * lineHeight + 5 : 0);
-        let y = CY - blockHeight / 2;
+        this.#paintVariantRow(g, sector);
+    }
 
-        line(sector.label, y, "pauih-hub-title");
-        y += 9;
-        for (const l of reasonLines) {
-            line(l, y, `pauih-hub-reason state-${sector.state}`);
-            y += lineHeight;
-        }
+    /**
+     * 画毂底的 MAP 翻选条。**它跟着毂文字一起重画**（放在同一个 `<g>` 里），
+     * 否则悬停重填毂文字时会把它擦掉。
+     *
+     * 显示文字按**悬停的扇区**各取各的 `variantLabels`：不同武器加值不同，
+     * 全盘共用第一把的数字会让玩家看到假加值。下标则是全层共用的。
+     */
+    #paintVariantRow(g: SVGGElement, sector: SectorData | null): void {
+        const v = this.level.variant;
+        if (!v || !v.labels.length) return;
+
+        const labels = sector?.variantLabels?.length ? sector.variantLabels : v.labels;
+        const row = document.createElementNS(SVG_NS, "text");
+        row.setAttribute("x", String(CX));
+        row.setAttribute("y", String(CY + VARIANT_ROW_DY));
+        row.setAttribute("class", "pauih-variant");
+        // 悬停的武器可能比全层少几段（例如只有一段），越界就退回它自己的第一段
+        row.textContent = `◀ ${labels[v.index] ?? labels[0] ?? ""} ▶`;
+        row.dataset.variant = "cycle";
+        g.appendChild(row);
+    }
+
+    /** 当前变体下标（0 = 第 1 击）；这一层没有翻选条时返回 0。 */
+    currentVariantIndex(): number {
+        return this.level.variant?.index ?? 0;
     }
 
     _replaceHTML(result: SVGElement, content: HTMLElement): void {
@@ -179,6 +215,18 @@ export class WheelApp extends AppV2 {
 
     #onClick = (ev: MouseEvent): void => {
         const el = ev.target as HTMLElement;
+
+        // —— 翻选条：点左半边退一段，右半边进一段（必须先于扇区判断）——
+        const v = this.level.variant;
+        if (el?.dataset?.variant === "cycle" && v && v.labels.length) {
+            const box = el.getBoundingClientRect();
+            const forward = ev.clientX > box.left + box.width / 2;
+            // 后退写成 +(n-1) 而不是 -1：JS 的 % 对负数返回负值，直接减会得到 -1。
+            v.index = (v.index + (forward ? 1 : v.labels.length - 1)) % v.labels.length;
+            void this.render(false);
+            return;
+        }
+
         const idx = el?.dataset?.index;
         if (idx === undefined) return;
         const sector = this.level.sectors[Number(idx)];
@@ -187,6 +235,11 @@ export class WheelApp extends AppV2 {
 
     #onHover = (ev: MouseEvent): void => {
         const el = ev.target as HTMLElement;
+        // ⚠ 翻选条自己不触发重画：它就住在毂文字那个 <g> 里，重画会把光标脚下的
+        //   节点换掉，浏览器随即再发一次 mouseover → 无限重画。
+        //   （其余毂内元素都是 pointer-events:none，只有它是可点的，所以只有它有这个问题。）
+        if (el?.dataset?.variant !== undefined) return;
+
         const idx = el?.dataset?.index;
         const g = this.element?.querySelector(".pauih-hub-text") as SVGGElement | null;
         if (!g) return;

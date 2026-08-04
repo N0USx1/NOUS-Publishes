@@ -45,9 +45,13 @@ function openAt(x: number, y: number): void {
                 ui.notifications.info("This character has no strikes available.");
                 return;
             }
+            // 翻选条的"默认文字"取本层第一个条目的；悬停到别的武器时
+            // 由 WheelApp 换成那把武器自己的（不同武器加值不同，见 types.ts）。
+            const labels = strikes[0]?.variantLabels ?? [];
             void openWheel!.setLevel({
                 title: "Strikes",
                 canGoBack: true,
+                variant: labels.length ? { index: 0, labels } : undefined,
                 sectors: [...strikes, BACK_SECTOR],
             });
             return;
@@ -66,9 +70,10 @@ function openAt(x: number, y: number): void {
                 // 而不是把这一格禁掉让人无从下手。
                 void execAuxiliary(actor, s.id, 0).then(() => openWheel?.close());
             } else {
-                // map 先写死 0（第 1 击）；MAP 三段翻选是 Task 7 的事。
-                // ★ ev 是真实点击事件，必须一路传到 variant.roll({ event })。
-                void rollStrike(actor, s.id, 0, ev).then(() => openWheel?.close());
+                // 打第几击由毂底的翻选条决定（没有翻选条时是 0 = 第 1 击）。
+                // ★ ev 是真实点击事件，必须一路传到 executor（它再翻成意图事件）。
+                const map = openWheel!.currentVariantIndex();
+                void rollStrike(actor, s.id, map, ev).then(() => openWheel?.close());
             }
             return;
         }

@@ -42,6 +42,11 @@ export function collectStrikes(actor: any): SectorData[] {
                     // 图标取自武器物品；有图标时扇区只画图标（见 types.ts）
                     img: strike.item?.img ?? undefined,
                     cost: "1",
+                    // MAP 三段。★ 原样用 pf2e 的 label，只在前面补一个动作消耗记号：
+                    // 实测 label 已是 "+9 (MAP -4)"，自己再拼"第 2 击 MAP -4"会重复
+                    // （findings-v0.1 §2，计划 Task 7 Step 3 的写法在这一点上是错的）。
+                    variantLabels: (strike.variants ?? [])
+                        .map((v: any) => `◆ ${String(v?.label ?? "?")}`),
                     // 未拔出 = gated（规则上此刻确实打不了），不是 risky
                     state: ready ? "normal" : "gated",
                     reason: ready ? undefined : "Not drawn — spend ◆ to draw it first.",

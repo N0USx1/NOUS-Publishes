@@ -29,6 +29,17 @@ export interface SectorData {
      *   而不是靠缩字号硬塞 —— "Unarmed Attack" 那种长度怎么缩都别扭。
      */
     img?: string;
+    /**
+     * 这个条目的**多段变体**显示文字，第 0 项是第 1 击。
+     *
+     * ⚠ 文字**直接来自 pf2e**（`strike.variants[i].label`），不要自己拼"第 N 击"：
+     *   findings-v0.1 §2 实测 label 本身就自带 MAP 文案
+     *   （`["+13", "+9 (MAP -4)", "+5 (MAP -8)"]`），再拼一遍会把 MAP 显示两次。
+     *
+     * 每个条目各存一份而不是全盘共用一份，是因为**不同武器的加值不同**：
+     * 共用第一把武器的数字，玩家悬停第二把时看到的就是假数字。
+     */
+    variantLabels?: string[];
 }
 
 /** 一层盘面。 */
@@ -38,4 +49,15 @@ export interface WheelLevel {
     sectors: SectorData[];
     /** 是否显示返回扇区 */
     canGoBack: boolean;
+    /**
+     * 中心毂底部的变体翻选条（MAP 三段）；这一层不需要时省略。
+     * 只有**下标**是全盘共用的状态——"现在是第几击"对整层成立；
+     * 具体显示哪串文字则按悬停的扇区各取各的 `variantLabels`。
+     */
+    variant?: {
+        /** 当前第几项，0 起 */
+        index: number;
+        /** 没有悬停任何扇区时显示的文字（取本层第一个条目的） */
+        labels: string[];
+    };
 }

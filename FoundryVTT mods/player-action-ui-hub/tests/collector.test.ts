@@ -58,6 +58,39 @@ describe("collectStrikes", () => {
         expect(out[0].badge).toBeUndefined();
     });
 
+    it("MAP 三段照抄 pf2e 的 label，不自己拼「第 N 击」", () => {
+        const actor = { system: { actions: [fakeStrike()] } };
+        const out = collectStrikes(actor);
+        // findings-v0.1 §2：label 本身已带 MAP 文案，我们只在前面补动作消耗记号。
+        // 若这里出现第二个 "MAP"，说明又拼了一遍（计划 Task 7 Step 3 的老错）。
+        expect(out[0].variantLabels).toEqual(["◆ +13", "◆ +9 (MAP -4)", "◆ +5 (MAP -8)"]);
+        for (const l of out[0].variantLabels!) {
+            expect(l.match(/MAP/g)?.length ?? 0).toBeLessThan(2);
+        }
+    });
+
+    it("不同武器各带各的变体文字（共用一份会显示假加值）", () => {
+        const actor = {
+            system: {
+                actions: [
+                    fakeStrike(),
+                    fakeStrike({
+                        label: "Dagger", item: { id: "item2" },
+                        variants: [{ label: "+11" }, { label: "+7 (MAP -4)" }],
+                    }),
+                ],
+            },
+        };
+        const out = collectStrikes(actor);
+        expect(out[0].variantLabels).toHaveLength(3);
+        expect(out[1].variantLabels).toEqual(["◆ +11", "◆ +7 (MAP -4)"]);
+    });
+
+    it("没有 variants 时给空数组而不是抛错（毂底就不画翻选条）", () => {
+        const actor = { system: { actions: [fakeStrike({ variants: undefined })] } };
+        expect(collectStrikes(actor)[0].variantLabels).toEqual([]);
+    });
+
     it("忽略非 strike 条目", () => {
         const actor = { system: { actions: [{ type: "other" }, fakeStrike()] } };
         expect(collectStrikes(actor)).toHaveLength(1);

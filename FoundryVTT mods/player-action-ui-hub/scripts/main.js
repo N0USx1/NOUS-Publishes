@@ -83,6 +83,8 @@ var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
 var HUB_CHARS_PER_LINE = 12;
+var VARIANT_ROW_DY = 16;
+var VARIANT_ROW_LIFT = 9;
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
@@ -188,28 +190,53 @@ var WheelApp = class extends AppV2 {
    */
   #paintHub(g, sector) {
     g.replaceChildren();
-    const line = /* @__PURE__ */ __name((text, y2, cls) => {
+    const line = /* @__PURE__ */ __name((text, y, cls) => {
       const t = document.createElementNS(SVG_NS, "text");
       t.setAttribute("x", String(CX));
-      t.setAttribute("y", String(y2));
+      t.setAttribute("y", String(y));
       t.setAttribute("class", cls);
       t.textContent = text;
       g.appendChild(t);
     }, "line");
+    const center = this.level.variant ? CY - VARIANT_ROW_LIFT : CY;
     if (!sector) {
-      line(this.level.title, CY, "pauih-hub-title");
-      return;
+      line(this.level.title, center, "pauih-hub-title");
+    } else {
+      const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
+      const lineHeight = 7;
+      const blockHeight = reasonLines.length ? reasonLines.length * lineHeight + 5 : 0;
+      let y = center - blockHeight / 2;
+      line(sector.label, y, "pauih-hub-title");
+      y += 9;
+      for (const l of reasonLines) {
+        line(l, y, `pauih-hub-reason state-${sector.state}`);
+        y += lineHeight;
+      }
     }
-    const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
-    const lineHeight = 7;
-    const blockHeight = reasonLines.length ? reasonLines.length * lineHeight + 5 : 0;
-    let y = CY - blockHeight / 2;
-    line(sector.label, y, "pauih-hub-title");
-    y += 9;
-    for (const l of reasonLines) {
-      line(l, y, `pauih-hub-reason state-${sector.state}`);
-      y += lineHeight;
-    }
+    this.#paintVariantRow(g, sector);
+  }
+  /**
+   * 画毂底的 MAP 翻选条。**它跟着毂文字一起重画**（放在同一个 `<g>` 里），
+   * 否则悬停重填毂文字时会把它擦掉。
+   *
+   * 显示文字按**悬停的扇区**各取各的 `variantLabels`：不同武器加值不同，
+   * 全盘共用第一把的数字会让玩家看到假加值。下标则是全层共用的。
+   */
+  #paintVariantRow(g, sector) {
+    const v = this.level.variant;
+    if (!v || !v.labels.length) return;
+    const labels = sector?.variantLabels?.length ? sector.variantLabels : v.labels;
+    const row = document.createElementNS(SVG_NS, "text");
+    row.setAttribute("x", String(CX));
+    row.setAttribute("y", String(CY + VARIANT_ROW_DY));
+    row.setAttribute("class", "pauih-variant");
+    row.textContent = `\u25C0 ${labels[v.index] ?? labels[0] ?? ""} \u25B6`;
+    row.dataset.variant = "cycle";
+    g.appendChild(row);
+  }
+  /** 当前变体下标（0 = 第 1 击）；这一层没有翻选条时返回 0。 */
+  currentVariantIndex() {
+    return this.level.variant?.index ?? 0;
   }
   _replaceHTML(result, content) {
     content.replaceChildren(result);
@@ -218,6 +245,14 @@ var WheelApp = class extends AppV2 {
   }
   #onClick = /* @__PURE__ */ __name((ev) => {
     const el = ev.target;
+    const v = this.level.variant;
+    if (el?.dataset?.variant === "cycle" && v && v.labels.length) {
+      const box = el.getBoundingClientRect();
+      const forward = ev.clientX > box.left + box.width / 2;
+      v.index = (v.index + (forward ? 1 : v.labels.length - 1)) % v.labels.length;
+      void this.render(false);
+      return;
+    }
     const idx = el?.dataset?.index;
     if (idx === void 0) return;
     const sector = this.level.sectors[Number(idx)];
@@ -225,6 +260,7 @@ var WheelApp = class extends AppV2 {
   }, "#onClick");
   #onHover = /* @__PURE__ */ __name((ev) => {
     const el = ev.target;
+    if (el?.dataset?.variant !== void 0) return;
     const idx = el?.dataset?.index;
     const g = this.element?.querySelector(".pauih-hub-text");
     if (!g) return;
@@ -296,6 +332,10 @@ function collectStrikes(actor) {
         // 图标取自武器物品；有图标时扇区只画图标（见 types.ts）
         img: strike.item?.img ?? void 0,
         cost: "1",
+        // MAP 三段。★ 原样用 pf2e 的 label，只在前面补一个动作消耗记号：
+        // 实测 label 已是 "+9 (MAP -4)"，自己再拼"第 2 击 MAP -4"会重复
+        // （findings-v0.1 §2，计划 Task 7 Step 3 的写法在这一点上是错的）。
+        variantLabels: (strike.variants ?? []).map((v) => `\u25C6 ${String(v?.label ?? "?")}`),
         // 未拔出 = gated（规则上此刻确实打不了），不是 risky
         state: ready ? "normal" : "gated",
         reason: ready ? void 0 : "Not drawn \u2014 spend \u25C6 to draw it first.",
@@ -391,9 +431,11 @@ function openAt(x, y) {
         ui.notifications.info("This character has no strikes available.");
         return;
       }
+      const labels = strikes[0]?.variantLabels ?? [];
       void openWheel.setLevel({
         title: "Strikes",
         canGoBack: true,
+        variant: labels.length ? { index: 0, labels } : void 0,
         sectors: [...strikes, BACK_SECTOR]
       });
       return;
@@ -406,7 +448,8 @@ function openAt(x, y) {
       if (s.state === "gated") {
         void execAuxiliary(actor, s.id, 0).then(() => openWheel?.close());
       } else {
-        void rollStrike(actor, s.id, 0, ev).then(() => openWheel?.close());
+        const map = openWheel.currentVariantIndex();
+        void rollStrike(actor, s.id, map, ev).then(() => openWheel?.close());
       }
       return;
     }

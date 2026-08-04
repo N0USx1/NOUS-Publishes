@@ -148,3 +148,17 @@
 }
 .pauih-hub-reason.state-risky { fill: var(--color-warm-1, #ee9b3a); }
 .pauih-hub-reason.state-gated { fill: var(--color-text-subtle, #9f8475); }
+
+/* MAP 三段翻选条，坐在毂底。文字整串来自 pf2e（"+9 (MAP -4)"），
+   这里只负责让它可点：左半边退一段、右半边进一段。 */
+.pauih-variant {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 6.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    /* ★ 毂内唯一可点的东西：其余毂元素一律 pointer-events:none */
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+}
+.pauih-variant:hover { fill: var(--color-warm-1, #ee9b3a); }
