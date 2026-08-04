@@ -10,6 +10,11 @@ const SIZE = 320;   // 窗口边长（像素）
 
 const AppV2 = foundry.applications.api.ApplicationV2;
 
+/** 把 v 夹在 [lo, hi] 内。窗口比轮盘还小时以 lo 为准（hi 会小于 lo）。 */
+function clamp(v: number, lo: number, hi: number): number {
+    return Math.max(lo, Math.min(v, hi));
+}
+
 export class WheelApp extends AppV2 {
     static DEFAULT_OPTIONS = {
         id: "player-action-ui-hub-wheel",
@@ -122,10 +127,17 @@ export class WheelApp extends AppV2 {
             : sector.label;
     };
 
-    /** 在指定屏幕坐标处弹出，并接管 Esc 与点击盘外关闭 */
+    /**
+     * 在指定屏幕坐标处弹出（**以该点为圆心**），并接管 Esc 与点击盘外关闭。
+     * 靠近屏幕边缘时会把盘面拉回可视区内，否则贴边呼出会有半个盘在屏幕外、扇区点不到。
+     */
     async openAt(x: number, y: number): Promise<void> {
         await this.render(true);
-        this.setPosition({ left: x - SIZE / 2, top: y - SIZE / 2 });
+
+        const margin = 4;
+        const left = clamp(x - SIZE / 2, margin, window.innerWidth - SIZE - margin);
+        const top = clamp(y - SIZE / 2, margin, window.innerHeight - SIZE - margin);
+        this.setPosition({ left, top });
 
         this.outsideHandler = (ev: MouseEvent) => {
             if (!this.element?.contains(ev.target as Node)) void this.close();

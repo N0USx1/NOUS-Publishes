@@ -46,6 +46,10 @@ var CX = 100;
 var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(v, hi));
+}
+__name(clamp, "clamp");
 var WheelApp = class extends AppV2 {
   static {
     __name(this, "WheelApp");
@@ -142,10 +146,16 @@ var WheelApp = class extends AppV2 {
     const title = this.element?.querySelector(".pauih-hub-title");
     if (title) title.textContent = sector.reason ? `${sector.label} \u2014 ${sector.reason}` : sector.label;
   }, "#onHover");
-  /** 在指定屏幕坐标处弹出，并接管 Esc 与点击盘外关闭 */
+  /**
+   * 在指定屏幕坐标处弹出（**以该点为圆心**），并接管 Esc 与点击盘外关闭。
+   * 靠近屏幕边缘时会把盘面拉回可视区内，否则贴边呼出会有半个盘在屏幕外、扇区点不到。
+   */
   async openAt(x, y) {
     await this.render(true);
-    this.setPosition({ left: x - SIZE / 2, top: y - SIZE / 2 });
+    const margin = 4;
+    const left = clamp(x - SIZE / 2, margin, window.innerWidth - SIZE - margin);
+    const top = clamp(y - SIZE / 2, margin, window.innerHeight - SIZE - margin);
+    this.setPosition({ left, top });
     this.outsideHandler = (ev) => {
       if (!this.element?.contains(ev.target)) void this.close();
     };
@@ -173,10 +183,58 @@ var WheelApp = class extends AppV2 {
   }
 };
 
+// src/target.ts
+function resolveActor() {
+  const controlled = canvas?.tokens?.controlled?.[0]?.actor;
+  if (controlled) return controlled;
+  const bound = game?.user?.character;
+  if (bound) return bound;
+  return null;
+}
+__name(resolveActor, "resolveActor");
+
 // src/main.ts
 var MODULE_ID = "player-action-ui-hub";
+var lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+document.addEventListener("mousemove", (ev) => {
+  lastMouse = { x: ev.clientX, y: ev.clientY };
+});
+var openWheel = null;
+function openAt(x, y) {
+  const actor = resolveActor();
+  if (!actor) {
+    ui.notifications.warn("\u6CA1\u6709\u53EF\u64CD\u4F5C\u7684\u89D2\u8272\uFF1A\u8BF7\u5148\u9009\u4E2D\u4F60\u7684 token");
+    return;
+  }
+  openWheel?.close();
+  const level = {
+    title: actor.name,
+    canGoBack: false,
+    sectors: [
+      { id: "strikes", label: "\u6253\u51FB", cost: null, state: "normal" },
+      { id: "actions", label: "\u52A8\u4F5C", cost: null, state: "normal" },
+      { id: "class", label: "\u804C\u4E1A", cost: null, state: "normal" },
+      { id: "spells", label: "\u6CD5\u672F", cost: null, state: "normal" }
+    ]
+  };
+  openWheel = new WheelApp(level, (s) => {
+    console.log("\u5206\u7C7B:", s.id);
+  });
+  void openWheel.openAt(x, y);
+}
+__name(openAt, "openAt");
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | init`);
+  game.keybindings.register(MODULE_ID, "openWheel", {
+    name: "\u547C\u51FA\u52A8\u4F5C\u8F6E\u76D8",
+    hint: "\u5728\u9F20\u6807\u4F4D\u7F6E\u5F39\u51FA\u8F6E\u76D8\u3002\u4E0E Ctrl+\u5DE6\u952E\u7B49\u6548\uFF0C\u4F9B\u4E0D\u4FBF\u4F7F\u7528 Ctrl+\u70B9\u51FB\u7684\u73A9\u5BB6\u6539\u7ED1\u3002",
+    editable: [{ key: "KeyR" }],
+    onDown: /* @__PURE__ */ __name(() => {
+      openAt(lastMouse.x, lastMouse.y);
+      return true;
+    }, "onDown"),
+    precedence: 0
+  });
 });
 Hooks.once("ready", () => {
   const mod = game.modules.get(MODULE_ID);
@@ -211,11 +269,25 @@ Hooks.once("ready", () => {
     ]
   };
   globalThis.pauih = {
-    demo: /* @__PURE__ */ __name(() => {
+    /** 调试入口：不传坐标就用鼠标当前所在位置 */
+    demo: /* @__PURE__ */ __name((x, y) => {
       const w = new WheelApp(demoLevel, (s) => console.log("picked:", s.label));
-      void w.openAt(window.innerWidth / 2, window.innerHeight / 2);
+      void w.openAt(x ?? lastMouse.x, y ?? lastMouse.y);
       return w;
     }, "demo")
   };
+  function isWheelSummon(ev) {
+    return ev.button === 0 && ev.ctrlKey && ev.target?.tagName === "CANVAS";
+  }
+  __name(isWheelSummon, "isWheelSummon");
+  for (const type of ["pointerdown", "mousedown", "pointerup", "click"]) {
+    document.addEventListener(type, (ev) => {
+      const me = ev;
+      if (!isWheelSummon(me)) return;
+      me.preventDefault();
+      me.stopImmediatePropagation();
+      if (type === "pointerdown") openAt(me.clientX, me.clientY);
+    }, { capture: true });
+  }
 });
 //# sourceMappingURL=main.js.map
