@@ -1,10 +1,27 @@
-/* 猎杀暗调：近黑做旧底、骨白高亮、衬线字 */
+/*
+ * Player Action UI Hub — 轮盘样式
+ *
+ * ★ 现阶段一律走 Foundry 原生外观（Nous 2026-08-05 定：先按原生做，皮肤以后再设计）。
+ *   所有颜色都用 core 的 CSS 变量，**不写死色值** —— 这样用户切换 Foundry 主题
+ *   （暗色/浅色）时轮盘自动跟着变，不需要我们维护第二套配色。
+ *
+ *   变量值实测自一个真实的 core 窗体（2026-08-05，量的是计算样式而非猜 CSS 文件）：
+ *     --background          rgba(11, 10, 19, 0.9)   窗体底色，自带 0.9 透明度
+ *     --color-cool-4        #302831                 边框
+ *     --color-text-primary  #efe6d8                 主文字
+ *     --color-text-subtle   #9f8475                 弱化文字
+ *     --color-warm-1        #ee9b3a                 强调琥珀（正好用于"走险"态）
+ *     backdrop-filter       blur(4px)               仅此一项，无饱和度/亮度调整
+ *     窗体投影              0 0 10px black
+ */
+
 #player-action-ui-hub-wheel {
     /* ★ 无框窗（window.frame:false）拿不到 AppV2 给带框窗的定位样式，
        默认是 position:static —— 那样 setPosition 写进内联的 left/top 会被完全无视，
        轮盘会按文档流跑到角落。实测 2026-08-04 就是这么翻车的，必须自己声明。 */
     position: absolute;
-    z-index: var(--z-index-app, 100);
+    /* 浮在普通窗体之上、提示层之下（core: app=30, tooltip=9999） */
+    z-index: calc(var(--z-index-app, 30) + 10);
 
     background: none;
     border: none;
@@ -12,14 +29,8 @@
     pointer-events: none;          /* 窗口本身不吃事件，只有 SVG 吃 */
 }
 
-/* 毛玻璃底：轮盘后面的画面模糊掉，扇区文字才读得清。
-   用伪元素画一个圆盘垫在 SVG 之下 —— backdrop-filter 加在 SVG 元素上
-   浏览器支持很差，垫一层普通 div/伪元素才稳。
-
-   ★ 参数照抄 Foundry 原生窗体，不自创（2026-08-04 实测量得）：
-     原生 .application .window-content → backdrop-filter: blur(4px)，仅此一项，
-     无饱和度/亮度调整；原生窗体投影 = 0 0 10px black。
-     我最初凭感觉写的 blur(7px)+saturate+brightness 与原生不符，已改齐。 */
+/* 毛玻璃底：垫一个圆盘在 SVG 之下。
+   backdrop-filter 直接加在 SVG 元素上浏览器支持很差，垫普通伪元素才稳。 */
 #player-action-ui-hub-wheel::before {
     content: "";
     position: absolute;
@@ -32,14 +43,12 @@
     z-index: 0;
 }
 
-/* 无障碍：跟随原生对"减少透明度"偏好的处理（foundry2.css:7160 起同款）。 */
+/* 无障碍：跟随 core 对"减少透明度"偏好的处理（foundry2.css:7160 起同款）。 */
 @media (prefers-reduced-transparency) {
     #player-action-ui-hub-wheel::before {
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
     }
-    .pauih-sector { fill: rgb(23, 20, 15); }
-    .pauih-hub { fill: rgb(11, 9, 6); }
 }
 
 #player-action-ui-hub-wheel .pauih-svg {
@@ -48,37 +57,47 @@
     width: 100%;
     height: 100%;
     pointer-events: auto;
+    /* 字体不写死，继承 core 的正文字体（Signika） */
+    font-family: inherit;
 }
 
+/* ── 扇区 ───────────────────────────────────────────── */
+
 .pauih-sector {
-    /* ★ 半透明是有意的：底下垫着 backdrop-filter 毛玻璃，
-       填充不透明就把模糊完全挡住了，看不出玻璃感。 */
-    fill: rgba(23, 20, 15, 0.90);
-    stroke: #6b5d45;
+    fill: var(--background, rgba(11, 10, 19, 0.9));
+    stroke: var(--color-cool-4, #302831);
     stroke-width: 1.2;
     cursor: pointer;
     transition: fill 90ms ease-out;
 }
-.pauih-sector:hover { fill: rgba(230, 223, 200, 0.94); }
+
+.pauih-sector:hover {
+    fill: color-mix(in srgb, var(--color-warm-1, #ee9b3a) 30%, var(--background, rgba(11, 10, 19, 0.9)));
+}
 
 /* ★ 三态（设计定档 §6.4）
-   risky = 可以做但有代价 → **亮度不变**，只换描边成琥珀色。
+   risky = 可以做但有代价 → **亮度不变**，只把描边换成 core 的强调琥珀。
            变暗会被读成"不该做"，那是把规则简化错了。
-   gated = 规则上此刻用不了 → 变暗。仍可点击。 */
-.pauih-sector.state-risky { stroke: #b8863a; stroke-width: 1.6; }
-.pauih-sector.state-gated { fill: rgba(16, 14, 11, 0.90); stroke: #4a4233; }
+   gated = 规则上此刻用不了 → 压暗。仍可点击。 */
+.pauih-sector.state-risky {
+    stroke: var(--color-warm-1, #ee9b3a);
+    stroke-width: 1.6;
+}
+.pauih-sector.state-gated {
+    fill: color-mix(in srgb, black 35%, var(--background, rgba(11, 10, 19, 0.9)));
+}
+
+/* ── 扇区文字 ───────────────────────────────────────── */
 
 .pauih-label {
-    fill: #c9bda0;
-    font-family: Georgia, "Times New Roman", serif;
+    fill: var(--color-text-primary, #efe6d8);
     font-size: 8px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
     user-select: none;
 }
-.pauih-sector:hover + .pauih-label { fill: #1a1610; }
-.pauih-sector.state-gated ~ .pauih-label { fill: #5d5548; }
+.pauih-sector.state-gated ~ .pauih-label { fill: var(--color-text-subtle, #9f8475); }
 
 .pauih-badge {
     font-size: 5px;
@@ -86,36 +105,37 @@
     pointer-events: none;
     user-select: none;
 }
-.pauih-badge.state-risky { fill: #d9a441; }   /* 琥珀：走险 */
-.pauih-badge.state-gated { fill: #7a6f5c; }   /* 灰：不满足 */
+.pauih-badge.state-risky { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-badge.state-gated { fill: var(--color-text-subtle, #9f8475); }
+
+/* ── 中心毂 ─────────────────────────────────────────── */
 
 .pauih-hub {
-    fill: rgba(11, 9, 6, 0.90);
-    stroke: #4a3f2e;
+    fill: var(--background, rgba(11, 10, 19, 0.9));
+    stroke: var(--color-cool-4, #302831);
     stroke-width: 1.5;
     pointer-events: none;
+}
+
+.pauih-hub-title {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
 }
 
 /* 中心毂的原因文字。★ SVG 的 <text> 不会自动换行，
    断行由 wheel-app.ts 的 wrapText() 做，这里只管样式。 */
 .pauih-hub-reason {
+    fill: var(--color-text-subtle, #9f8475);
     font-size: 5.2px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
     user-select: none;
-    fill: #9a8f79;
 }
-.pauih-hub-reason.state-risky { fill: #c98f6a; }   /* 走险：琥珀偏红，与扇区角标呼应 */
-.pauih-hub-reason.state-gated { fill: #8a8070; }   /* 不满足：灰 */
-
-.pauih-hub-title {
-    fill: #d8cfb4;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 9px;
-    letter-spacing: 1.5px;
-    text-anchor: middle;
-    dominant-baseline: middle;
-    pointer-events: none;
-    user-select: none;
-}
+.pauih-hub-reason.state-risky { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-hub-reason.state-gated { fill: var(--color-text-subtle, #9f8475); }
