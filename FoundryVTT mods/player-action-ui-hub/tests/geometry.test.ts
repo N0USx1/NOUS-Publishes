@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sectorPath, sectorCentroid } from "../src/geometry";
+import { sectorPath, sectorCentroid, hitTest } from "../src/geometry";
 
 describe("sectorPath", () => {
     it("四等分时第一个扇区从正上方开始", () => {
@@ -28,8 +28,6 @@ describe("sectorCentroid", () => {
     });
 });
 
-import { hitTest } from "../src/geometry";
-
 describe("hitTest", () => {
     const base = { total: 4, rOuter: 90, rInner: 55, cx: 100, cy: 100 };
 
@@ -47,5 +45,12 @@ describe("hitTest", () => {
 
     it("环外不命中", () => {
         expect(hitTest(base, 100, 0)).toBe(-1);
+    });
+
+    // 边界语义：判据是 dist < rInner / dist > rOuter，故边界线上算命中。
+    // 亚像素级差异，实用上无影响，此处钉住行为防将来被无意改掉。
+    it("恰好落在内外边界上算命中", () => {
+        expect(hitTest(base, 100, 100 - 55)).toBe(0);   // 内边界
+        expect(hitTest(base, 100, 100 - 90)).toBe(0);   // 外边界
     });
 });
