@@ -29,4 +29,15 @@ redistribute, use commercially, or publish derivative works without permission.
 
 ## Mods in this folder
 
-(to be added)
+| Mod | System | Status |
+|---|---|---|
+| [Player Action UI Hub](./player-action-ui-hub/) | Pathfinder 2e | Design stage, v0.0.0 (manifest only, no code yet) |
+
+## Research notes
+
+The [`docs/`](./docs/) folder holds system research that outlives any single mod:
+
+| Document | Contents |
+|---|---|
+| [PF2e Class Mechanics Overview](./docs/2026-08-04-pf2e-class-mechanics-overview.md) | Full dossier on all 29 classes — how each signature mechanic is actually implemented in the pf2e system, a table of callable infrastructure, and two mis-filed entries found in the system's own packs |
+| [PF2e Class Signature Operations Inventory](./docs/2026-08-04-pf2e-class-inventory.md) | The condensed pain-point table and three categories of gaps |
