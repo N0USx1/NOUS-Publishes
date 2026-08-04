@@ -4,17 +4,18 @@ import { wrapText } from "./text";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const R_OUTER = 90;
-// 中心毂半径。★ 2026-08-05 由 55 缩到 42（Nous）：毂太大挤得外圈太窄，
-// "Unarmed Attack" 这种长名字会溢出扇区。缩毂 = 给扇区让出宽度。
-const R_INNER = 42;
+// 中心毂半径。★ 2026-08-05 演进：55 → 42（给长名字让路）→ 56（Nous：
+// 名字已改由图标承载、不再占扇区宽度，毂可以放大到贴近图标，
+// 腾出的空间留给毂内的细节，如动作经济与职业状态）。
+const R_INNER = 56;
 const CX = 100;
 const CY = 100;
 const SIZE = 320;   // 窗口边长（像素）
 
 const AppV2 = foundry.applications.api.ApplicationV2;
 
-/** 中心毂一行能放几个"全宽字"。毂半径 42、字号 5.2，留边后约 12。 */
-const HUB_CHARS_PER_LINE = 12;
+/** 中心毂一行能放几个"全宽字"。毂半径 56、字号 5.2，留边后约 16。 */
+const HUB_CHARS_PER_LINE = 16;
 
 /** 变体翻选条在毂内的纵向位置（毂心下方多少）。 */
 const VARIANT_ROW_DY = 16;
@@ -123,7 +124,7 @@ export class WheelApp extends AppV2 {
             if (sector.img) {
                 // ★ 有图标就**只画图标**：名字交给中心毂在悬停时显示，
                 //   长名字因此不可能压出扇区（见 types.ts 的 img 注释）。
-                const size = 16;
+                const size = 20;
                 const img = document.createElementNS(SVG_NS, "image");
                 img.setAttribute("href", sector.img);
                 img.setAttribute("x", String(c.x - size / 2));
@@ -227,13 +228,34 @@ export class WheelApp extends AppV2 {
         if (!v || !v.labels.length) return;
 
         const labels = sector?.variantLabels?.length ? sector.variantLabels : v.labels;
+        const y = CY + VARIANT_ROW_DY;
+
+        // ★ 两个箭头各自成元素，才能各自有悬停反馈。
+        //   之前整行是一个 <text>、悬停时整串一起变色，鼠标在左边还是右边毫无区别，
+        //   玩家看不出点哪儿会往哪翻（Nous 2026-08-05 指出"左右键没有任何反馈"）。
+        const arrow = (dir: "prev" | "next", dx: number, glyph: string): void => {
+            const t = document.createElementNS(SVG_NS, "text");
+            t.setAttribute("x", String(CX + dx));
+            t.setAttribute("y", String(y));
+            t.setAttribute("class", "pauih-variant-arrow");
+            t.textContent = glyph;
+            t.dataset.variant = dir;
+            g.appendChild(t);
+        };
+
+        // 悬停的武器可能比全层少几段（例如只有一段），越界就退回它自己的第一段
+        const text = labels[v.index] ?? labels[0] ?? "";
+        // 箭头位置随文字长度走，别压字
+        const halfWidth = 10 + text.length * 1.6;
+
+        arrow("prev", -halfWidth, "◀");
+        arrow("next", halfWidth, "▶");
+
         const row = document.createElementNS(SVG_NS, "text");
         row.setAttribute("x", String(CX));
-        row.setAttribute("y", String(CY + VARIANT_ROW_DY));
+        row.setAttribute("y", String(y));
         row.setAttribute("class", "pauih-variant");
-        // 悬停的武器可能比全层少几段（例如只有一段），越界就退回它自己的第一段
-        row.textContent = `◀ ${labels[v.index] ?? labels[0] ?? ""} ▶`;
-        row.dataset.variant = "cycle";
+        row.textContent = text;
         g.appendChild(row);
     }
 
@@ -251,13 +273,12 @@ export class WheelApp extends AppV2 {
     #onClick = (ev: MouseEvent): void => {
         const el = ev.target as HTMLElement;
 
-        // —— 翻选条：点左半边退一段，右半边进一段（必须先于扇区判断）——
+        // —— 翻选箭头：各自是独立元素，点谁就往谁的方向翻（必须先于扇区判断）——
         const v = this.level.variant;
-        if (el?.dataset?.variant === "cycle" && v && v.labels.length) {
-            const box = el.getBoundingClientRect();
-            const forward = ev.clientX > box.left + box.width / 2;
+        const dir = el?.dataset?.variant;
+        if ((dir === "prev" || dir === "next") && v && v.labels.length) {
             // 后退写成 +(n-1) 而不是 -1：JS 的 % 对负数返回负值，直接减会得到 -1。
-            v.index = (v.index + (forward ? 1 : v.labels.length - 1)) % v.labels.length;
+            v.index = (v.index + (dir === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
             void this.render(false);
             return;
         }

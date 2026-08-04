@@ -77,12 +77,12 @@ __name(wrapText, "wrapText");
 // src/wheel-app.ts
 var SVG_NS = "http://www.w3.org/2000/svg";
 var R_OUTER = 90;
-var R_INNER = 42;
+var R_INNER = 56;
 var CX = 100;
 var CY = 100;
 var SIZE = 320;
 var AppV2 = foundry.applications.api.ApplicationV2;
-var HUB_CHARS_PER_LINE = 12;
+var HUB_CHARS_PER_LINE = 16;
 var VARIANT_ROW_DY = 16;
 var VARIANT_ROW_LIFT = 9;
 function clamp(v, lo, hi) {
@@ -171,7 +171,7 @@ var WheelApp = class extends AppV2 {
       svg.appendChild(path);
       const c = sectorCentroid(spec);
       if (sector.img) {
-        const size = 16;
+        const size = 20;
         const img = document.createElementNS(SVG_NS, "image");
         img.setAttribute("href", sector.img);
         img.setAttribute("x", String(c.x - size / 2));
@@ -258,12 +258,25 @@ var WheelApp = class extends AppV2 {
     const v = this.level.variant;
     if (!v || !v.labels.length) return;
     const labels = sector?.variantLabels?.length ? sector.variantLabels : v.labels;
+    const y = CY + VARIANT_ROW_DY;
+    const arrow = /* @__PURE__ */ __name((dir, dx, glyph) => {
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", String(CX + dx));
+      t.setAttribute("y", String(y));
+      t.setAttribute("class", "pauih-variant-arrow");
+      t.textContent = glyph;
+      t.dataset.variant = dir;
+      g.appendChild(t);
+    }, "arrow");
+    const text = labels[v.index] ?? labels[0] ?? "";
+    const halfWidth = 10 + text.length * 1.6;
+    arrow("prev", -halfWidth, "\u25C0");
+    arrow("next", halfWidth, "\u25B6");
     const row = document.createElementNS(SVG_NS, "text");
     row.setAttribute("x", String(CX));
-    row.setAttribute("y", String(CY + VARIANT_ROW_DY));
+    row.setAttribute("y", String(y));
     row.setAttribute("class", "pauih-variant");
-    row.textContent = `\u25C0 ${labels[v.index] ?? labels[0] ?? ""} \u25B6`;
-    row.dataset.variant = "cycle";
+    row.textContent = text;
     g.appendChild(row);
   }
   /** 当前变体下标（0 = 第 1 击）；这一层没有翻选条时返回 0。 */
@@ -278,10 +291,9 @@ var WheelApp = class extends AppV2 {
   #onClick = /* @__PURE__ */ __name((ev) => {
     const el = ev.target;
     const v = this.level.variant;
-    if (el?.dataset?.variant === "cycle" && v && v.labels.length) {
-      const box = el.getBoundingClientRect();
-      const forward = ev.clientX > box.left + box.width / 2;
-      v.index = (v.index + (forward ? 1 : v.labels.length - 1)) % v.labels.length;
+    const dir = el?.dataset?.variant;
+    if ((dir === "prev" || dir === "next") && v && v.labels.length) {
+      v.index = (v.index + (dir === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
       void this.render(false);
       return;
     }

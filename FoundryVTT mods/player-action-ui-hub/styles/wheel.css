@@ -90,8 +90,12 @@
 /* ── 扇区文字 ───────────────────────────────────────── */
 
 .pauih-icon {
-    pointer-events: auto;          /* 图标本身也要能点 */
-    cursor: pointer;
+    /* ★ 图标**不吃鼠标事件**，命中判定全部落到底下的扇区路径上。
+       图标在 SVG 里是扇区的**兄弟节点不是子节点**，若它自己吃事件，
+       鼠标移到图标上时扇区就不再是 :hover，高亮会整块掉——
+       跟 DST 那次"按钮上叠非按钮 Image 挡住点击"是同一类坑。
+       点击也一样落到扇区上，所以功能不受影响。 */
+    pointer-events: none;
     /* 圆角裁一下，贴合扇区的观感 */
     clip-path: inset(0 round 2px);
 }
@@ -149,16 +153,27 @@
 .pauih-hub-reason.state-risky { fill: var(--color-warm-1, #ee9b3a); }
 .pauih-hub-reason.state-gated { fill: var(--color-text-subtle, #9f8475); }
 
-/* MAP 三段翻选条，坐在毂底。文字整串来自 pf2e（"+9 (MAP -4)"），
-   这里只负责让它可点：左半边退一段、右半边进一段。 */
+/* MAP 三段翻选条，坐在毂底。文字整串来自 pf2e（"+9 (MAP -4)"）。 */
 .pauih-variant {
     fill: var(--color-text-primary, #efe6d8);
     font-size: 6.5px;
     text-anchor: middle;
     dominant-baseline: middle;
-    /* ★ 毂内唯一可点的东西：其余毂元素一律 pointer-events:none */
+    pointer-events: none;          /* 数字本身不可点，只有两侧箭头可点 */
+    user-select: none;
+}
+
+/* ★ 两个箭头各自是独立元素，才能各自有悬停反馈 —— 整行做成一个元素时
+   鼠标在左在右都一样变色，玩家看不出点哪会往哪翻（Nous 2026-08-05 指出）。
+   它们是毂内**仅有的**可点元素，其余一律 pointer-events:none。 */
+.pauih-variant-arrow {
+    fill: var(--color-text-subtle, #9f8475);
+    font-size: 8px;
+    text-anchor: middle;
+    dominant-baseline: middle;
     pointer-events: auto;
     cursor: pointer;
     user-select: none;
+    transition: fill 80ms ease-out;
 }
-.pauih-variant:hover { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-variant-arrow:hover { fill: var(--color-warm-1, #ee9b3a); }
