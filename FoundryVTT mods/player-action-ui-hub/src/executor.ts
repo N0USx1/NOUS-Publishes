@@ -1,5 +1,6 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import { strikeSectorId, strikesOf, type WheelStrike } from "./collectors/strikes";
+import { applySelfEffectAfterCast } from "./effects";
 
 /**
  * 按扇区 id 回查 strike 对象。
@@ -169,6 +170,17 @@ export async function castSpell(
             return;
         }
         await entry.cast(spell, { rank: spell.rank });
+
+        /*
+         * ★ 施放之后自动把"作用于自己"的效果套上（②段第一步）。
+         *   pf2e 只在聊天卡片上给个按钮等玩家点 —— 那一步是纯机械劳动，
+         *   而 Shield 这类每回合都要重来（实测持续"到你下回合开始"）。
+         *
+         * ⚠ **放在 cast 之后、且失败不影响施法**：骰子已经掷出去了，
+         *   自动化出问题不该把已经生效的施法也搅黄。
+         */
+        const applied = await applySelfEffectAfterCast(actor, spell);
+        if (applied) ui.notifications.info(`${applied} applied.`);
     } catch (err) {
         console.error("player-action-ui-hub | castSpell 失败", err);
         ui.notifications.error("Casting failed — see the console for details.");

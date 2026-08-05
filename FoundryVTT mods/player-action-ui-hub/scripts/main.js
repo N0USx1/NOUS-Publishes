@@ -1156,6 +1156,51 @@ function collectSpells(actor, entryId) {
 }
 __name(collectSpells, "collectSpells");
 
+// src/effects.ts
+function isSelfTargeted(spell) {
+  const hasTarget = !!(spell.target && String(spell.target).trim());
+  return !hasTarget && !spell.area;
+}
+__name(isSelfTargeted, "isSelfTargeted");
+function selfEffectUuid(description) {
+  const links = [...String(description ?? "").matchAll(/@UUID\[([^\]]+)\]\{([^}]*)\}/g)];
+  const hit = links.find(([, uuid, label]) => uuid.includes("spell-effects") && /^\s*Spell Effect:/i.test(label));
+  return hit?.[1] ?? null;
+}
+__name(selfEffectUuid, "selfEffectUuid");
+async function applyEffect(actor, uuid) {
+  try {
+    if (!actor) return null;
+    if (!actor.canUserModify?.(game.user, "update")) return null;
+    const doc = await fromUuid(uuid);
+    if (!doc) return null;
+    const data = doc.toObject();
+    foundry.utils.setProperty(data, "flags.player-action-ui-hub.autoApplied", true);
+    await actor.createEmbeddedDocuments("Item", [data]);
+    return doc.name ?? null;
+  } catch (err) {
+    console.error("player-action-ui-hub | applyEffect \u5931\u8D25", err);
+    return null;
+  }
+}
+__name(applyEffect, "applyEffect");
+async function applySelfEffectAfterCast(actor, spell) {
+  try {
+    const shape = {
+      target: spell?.system?.target?.value ?? null,
+      area: spell?.system?.area ?? null
+    };
+    if (!isSelfTargeted(shape)) return null;
+    const uuid = selfEffectUuid(String(spell?.system?.description?.value ?? ""));
+    if (!uuid) return null;
+    return await applyEffect(actor, uuid);
+  } catch (err) {
+    console.error("player-action-ui-hub | applySelfEffectAfterCast \u5931\u8D25", err);
+    return null;
+  }
+}
+__name(applySelfEffectAfterCast, "applySelfEffectAfterCast");
+
 // src/executor.ts
 function findStrike(actor, strikeId) {
   return strikesOf(actor).find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
@@ -1226,6 +1271,8 @@ async function castSpell(actor, entryId, spellId) {
       return;
     }
     await entry.cast(spell, { rank: spell.rank });
+    const applied = await applySelfEffectAfterCast(actor, spell);
+    if (applied) ui.notifications.info(`${applied} applied.`);
   } catch (err) {
     console.error("player-action-ui-hub | castSpell \u5931\u8D25", err);
     ui.notifications.error("Casting failed \u2014 see the console for details.");
