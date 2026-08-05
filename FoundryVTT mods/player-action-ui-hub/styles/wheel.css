@@ -34,7 +34,8 @@
 #player-action-ui-hub-wheel::before {
     content: "";
     position: absolute;
-    inset: 4%;
+    /* ★ 环的外缘已经顶满 viewBox，毛玻璃底也要跟到边缘，否则环会压在它外面 */
+    inset: 0;
     border-radius: 50%;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
@@ -63,36 +64,52 @@
 
 /* ── 扇区 ───────────────────────────────────────────── */
 
+/* ★ 2026-08-05：扇区由「填充的 path」换成「描边的弧」（claude-draws 画笔模型）。
+   所以本节的主角色从 fill 变成 stroke —— 环宽 = stroke-width，由 wheel-app 按 2W 写在
+   元素上，**几何一律不在 CSS 里填数**。分格与缝隙由 stroke-dasharray 表达。 */
 .pauih-sector {
+    fill: none;
+    stroke: var(--background, rgba(11, 10, 19, 0.9));
+    /* 扇区一律平头：相邻圆头会各凸出 atan(W/R)，把缝隙吃掉粘成一片。
+       只有环最外那两端是圆的，由 .pauih-sector-cap 单独补。 */
+    stroke-linecap: butt;
+    cursor: pointer;
+    transition: stroke 90ms ease-out;
+}
+
+/* 环两端的圆头端帽。半径 = 笔半径 W，圆心压在中线上（几何见 geometry.ts 的 ringCaps）。 */
+.pauih-sector-cap {
     fill: var(--background, rgba(11, 10, 19, 0.9));
-    stroke: var(--color-cool-4, #302831);
-    stroke-width: 1.2;
-    /* SVG path 没有原生圆角；圆化拐角靠 round 的 linejoin。
-       环底缺口两端因此是圆头，与 mockup 一致。 */
-    stroke-linejoin: round;
     cursor: pointer;
     transition: fill 90ms ease-out;
 }
 
 /* 选中/悬停 = core 自己的按钮悬停色（实测 --button-hover-background-color = #c9593f，
-   即 --color-warm-2）。用它而不是自创的金色，观感与原生按钮完全一致。 */
-.pauih-sector:hover {
-    fill: var(--button-hover-background-color, #c9593f);
-}
-/* ★ 按下反馈：压暗一档并轻微内缩，手指落下有回应（Nous 2026-08-05 要求）。 */
-.pauih-sector:active {
-    fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f));
-}
+   即 --color-warm-2）。用它而不是自创的金色，观感与原生按钮完全一致。
+   ★ 挂在 <g> 上而不是各自挂：端帽必须跟着它所属的扇区一起亮，
+     否则鼠标在首尾扇区上移动时，帽子和身子会分家。 */
+.pauih-sector-g:hover .pauih-sector { stroke: var(--button-hover-background-color, #c9593f); }
+.pauih-sector-g:hover .pauih-sector-cap { fill: var(--button-hover-background-color, #c9593f); }
+/* ★ 按下反馈：压暗一档，手指落下有回应（Nous 2026-08-05 要求）。 */
+.pauih-sector-g:active .pauih-sector { stroke: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+.pauih-sector-g:active .pauih-sector-cap { fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
 
 /* ★ 三态（设计定档 §6.4）
-   risky = 可以做但有代价 → **亮度不变**，只把描边换成 core 的强调琥珀。
+   risky = 可以做但有代价 → **亮度不变**，只加 core 的强调琥珀作标记。
            变暗会被读成"不该做"，那是把规则简化错了。
-   gated = 规则上此刻用不了 → 压暗。仍可点击。 */
-.pauih-sector.state-risky {
-    stroke: var(--color-warm-1, #ee9b3a);
-    stroke-width: 1.6;
+   gated = 规则上此刻用不了 → 压暗。仍可点击。
+
+   ⚠ risky 原来是「把描边换成琥珀」，现在描边已经是扇区本体了，那条路没了。
+     改用琥珀外发光：同样是加标记而不动亮度，语义不变。 */
+/* ★ 发光挂在**组**上，才会沿着「扇区 + 端帽」的整条外轮廓描一圈。
+   挂在两个元素上各自发光，接缝处会冒出内部的发光边，而且半圆那头容易被漏掉。 */
+.pauih-sector-g.state-risky {
+    filter: drop-shadow(0 0 1.6px var(--color-warm-1, #ee9b3a));
 }
 .pauih-sector.state-gated {
+    stroke: color-mix(in srgb, black 35%, var(--background, rgba(11, 10, 19, 0.9)));
+}
+.pauih-sector-cap.state-gated {
     fill: color-mix(in srgb, black 35%, var(--background, rgba(11, 10, 19, 0.9)));
 }
 
@@ -119,7 +136,10 @@
     pointer-events: none;
     user-select: none;
 }
-.pauih-sector.state-gated ~ .pauih-label { fill: var(--color-text-subtle, #9f8475); }
+/* ⚠ 原来写的是 `.pauih-sector.state-gated ~ .pauih-label`，靠"label 是扇区的后续兄弟"。
+   2026-08-05 扇区包进 <g> 之后兄弟关系就断了，那条会**静默失效**（不报错，只是不变色）。
+   改成状态直接挂在 label 自己身上，和 icon／badge 的做法一致。 */
+.pauih-label.state-gated { fill: var(--color-text-subtle, #9f8475); }
 
 .pauih-badge {
     font-size: 5px;
@@ -192,29 +212,33 @@
    坐在环底缺口里，三格：‹ 上一项 · ↩ 返回 · › 下一项。
    它是通用导航条：上面是什么内容，‹› 就翻什么。 */
 
+/* ★ 胶囊现在是**一段弧**，和外环同构（2026-08-05 第三轮）。
+   所以它和扇区一样：弧身靠描边成形，端帽是单独的半圆 path。 */
 .pauih-cap {
-    fill: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
-    /* ★ 圆头做法：同色粗描边 + round 的 linejoin。SVG path 没有原生圆角，
-       描边越粗拐角越圆 —— mockup 里胶囊是明显的圆头胶囊，不是切角梯形。 */
+    /* ⚠ 必须显式 none —— <circle> 的 fill 默认**不是** none，
+       漏写会把整个 r=R 的圆盘填满，中间黑掉一大块（实撞过）。 */
+    fill: none;
     stroke: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
-    stroke-width: 5;
-    stroke-linejoin: round;
+    stroke-linecap: butt;
     cursor: pointer;
-    transition: fill 90ms ease-out, stroke 90ms ease-out;
+    transition: stroke 90ms ease-out;
 }
-.pauih-cap:hover {
-    fill: var(--button-hover-background-color, #c9593f);
-    stroke: var(--button-hover-background-color, #c9593f);
+/* 胶囊两端的半圆帽：反过来只要 fill */
+.pauih-cap-end {
+    fill: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
+    cursor: pointer;
+    transition: fill 90ms ease-out;
 }
-.pauih-cap:active { fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+/* 悬停挂在组上，帽子才会跟着它那一格一起亮 */
+.pauih-cap-g:hover .pauih-cap { stroke: var(--button-hover-background-color, #c9593f); }
+.pauih-cap-g:hover .pauih-cap-end { fill: var(--button-hover-background-color, #c9593f); }
+.pauih-cap-g:active .pauih-cap { stroke: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+.pauih-cap-g:active .pauih-cap-end { fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
 
 /* 不可用的格子：照画，但不响应也不提示可点 —— 胶囊宽度因此恒定，不会忽宽忽窄 */
-.pauih-cap.disabled {
-    fill: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9)));
-    stroke: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9)));
-    cursor: default;
-    pointer-events: none;
-}
+.pauih-cap-g.disabled { cursor: default; pointer-events: none; }
+.pauih-cap-g.disabled .pauih-cap { stroke: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9))); }
+.pauih-cap-g.disabled .pauih-cap-end { fill: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9))); }
 
 .pauih-cap-glyph {
     fill: var(--color-text-primary, #efe6d8);
@@ -261,12 +285,3 @@
     pointer-events: none;
 }
 
-/* 内圈亮色描边 —— mockup 里最醒目的一条，把中心毂与扇区环分开。
-   单画一个 circle 压在扇区之上，否则会被扇区的填充切断。 */
-.pauih-rim {
-    fill: none;
-    stroke: var(--color-light-2, #efe6d8);
-    stroke-width: 2;
-    opacity: 0.85;
-    pointer-events: none;
-}

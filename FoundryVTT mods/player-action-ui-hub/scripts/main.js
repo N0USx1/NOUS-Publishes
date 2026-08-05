@@ -2,41 +2,54 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // src/geometry.ts
+var TAU = Math.PI * 2;
 function polar(cx, cy, r, angle) {
   return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
 }
 __name(polar, "polar");
-function sectorAngles(spec) {
-  const { index, total, gap = 0, arcSpan = Math.PI * 2 } = spec;
+function sectorAngles(spec, index) {
+  const { total, gap = 0, arcSpan = TAU, center = -Math.PI / 2 } = spec;
   const step = arcSpan / total;
-  const start = -Math.PI / 2 - arcSpan / 2 + index * step;
+  const start = center - arcSpan / 2 + index * step;
   return { a0: start + gap / 2, a1: start + step - gap / 2 };
 }
 __name(sectorAngles, "sectorAngles");
-function sectorPath(spec) {
-  const { rOuter, rInner, cx, cy } = spec;
-  const { a0, a1 } = sectorAngles(spec);
-  const largeArc = a1 - a0 > Math.PI ? 1 : 0;
-  const o0 = polar(cx, cy, rOuter, a0);
-  const o1 = polar(cx, cy, rOuter, a1);
-  const i1 = polar(cx, cy, rInner, a1);
-  const i0 = polar(cx, cy, rInner, a0);
-  const f = /* @__PURE__ */ __name((n) => n.toFixed(2), "f");
-  return [
-    `M ${f(o0.x)} ${f(o0.y)}`,
-    `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${f(o1.x)} ${f(o1.y)}`,
-    `L ${f(i1.x)} ${f(i1.y)}`,
-    `A ${rInner} ${rInner} 0 ${largeArc} 0 ${f(i0.x)} ${f(i0.y)}`,
-    "Z"
-  ].join(" ");
+function sectorArc(spec, index) {
+  const { R: R2, W: W2 } = spec;
+  const { a0, a1 } = sectorAngles(spec, index);
+  const circumference = TAU * R2;
+  const drawn = (a1 - a0) * R2;
+  return {
+    dash: `${drawn.toFixed(3)} ${(circumference - drawn).toFixed(3)}`,
+    rotate: a0 * 180 / Math.PI,
+    strokeWidth: 2 * W2
+  };
 }
-__name(sectorPath, "sectorPath");
-function sectorCentroid(spec) {
-  const { rOuter, rInner, cx, cy } = spec;
-  const { a0, a1 } = sectorAngles(spec);
-  return polar(cx, cy, (rOuter + rInner) / 2, (a0 + a1) / 2);
+__name(sectorArc, "sectorArc");
+function sectorCentroid(spec, index) {
+  const { a0, a1 } = sectorAngles(spec, index);
+  return polar(spec.cx, spec.cy, spec.R, (a0 + a1) / 2);
 }
 __name(sectorCentroid, "sectorCentroid");
+function ringCapPath(spec, which, bulge = 1) {
+  const { cx, cy, R: R2, W: W2 } = spec;
+  const angles = which === "start" ? sectorAngles(spec, 0).a0 : sectorAngles(spec, spec.total - 1).a1;
+  const nx = Math.cos(angles);
+  const ny = Math.sin(angles);
+  const outer = { x: cx + (R2 + W2) * nx, y: cy + (R2 + W2) * ny };
+  const inner = { x: cx + (R2 - W2) * nx, y: cy + (R2 - W2) * ny };
+  const sweep = which === "start" ? 0 : 1;
+  const f = /* @__PURE__ */ __name((n) => n.toFixed(3), "f");
+  const radialR = W2;
+  const tangentR = W2 * bulge;
+  const rot = angles * 180 / Math.PI;
+  return `M ${f(outer.x)} ${f(outer.y)} A ${f(radialR)} ${f(tangentR)} ${f(rot)} 0 ${sweep} ${f(inner.x)} ${f(inner.y)} Z`;
+}
+__name(ringCapPath, "ringCapPath");
+function capOvershoot(R2, W2, bulge = 1) {
+  return Math.asin(Math.min(1, W2 * bulge / R2));
+}
+__name(capOvershoot, "capOvershoot");
 
 // src/text.ts
 function charWidth(ch) {
@@ -134,19 +147,24 @@ __name(glyphs, "glyphs");
 
 // src/wheel-app.ts
 var SVG_NS = "http://www.w3.org/2000/svg";
-var R_OUTER = 74;
-var R_INNER = 50;
 var CX = 100;
 var CY = 100;
 var SIZE = 320;
+var R_HUB = 68;
+var GUTTER = 5;
+var W = 13.5;
+var R = R_HUB + GUTTER + W;
+var R_OUTER = R + W;
+var VIEW = 2 * R_OUTER;
 var AppV2 = foundry.applications.api.ApplicationV2;
 var HUB_CHARS_PER_LINE = 16;
-var CAP_W = 66;
-var CAP_H = 19;
-var CAP_R = 9;
-var CAP_TOP = 164;
-var CAP_GUTTER = 1;
-var GAP_ANGLE = 2 * Math.atan((CAP_W / 2 + CAP_GUTTER) / (CAP_TOP - CY));
+var CAP_H = 23;
+var W_CAP = CAP_H / 2;
+var CAP_SEAM = 1.6;
+var CAP_INK = 56 * Math.PI / 180;
+var CAP_CLEAR = 4 * Math.PI / 180;
+var CAP_BULGE = 1;
+var GAP_ANGLE = CAP_INK + 2 * CAP_CLEAR + 2 * capOvershoot(R, W, CAP_BULGE);
 var ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
 var IDLE_DISMISS_MS = 5e3;
 function clamp(v, lo, hi) {
@@ -232,26 +250,36 @@ var WheelApp = class extends AppV2 {
   //   AppV2 对 _renderHTML 的返回值不限类型，它只是原样传给 _replaceHTML。
   async _renderHTML() {
     const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", `0 0 ${SIZE / 1.6} ${SIZE / 1.6}`);
+    svg.setAttribute("viewBox", `0 0 ${VIEW} ${VIEW}`);
     svg.setAttribute("class", "pauih-svg");
     const total = this.level.sectors.length;
+    const ring = { cx: CX, cy: CY, R, W, total, gap: 0.02, arcSpan: ARC_SPAN };
     this.level.sectors.forEach((sector, index) => {
-      const spec = {
-        index,
-        total,
-        rOuter: R_OUTER,
-        rInner: R_INNER,
-        cx: CX,
-        cy: CY,
-        gap: 0.02,
-        arcSpan: ARC_SPAN
-      };
-      const path = document.createElementNS(SVG_NS, "path");
-      path.setAttribute("d", sectorPath(spec));
-      path.setAttribute("class", `pauih-sector state-${sector.state}`);
-      path.dataset.index = String(index);
-      svg.appendChild(path);
-      const c = sectorCentroid(spec);
+      const group = document.createElementNS(SVG_NS, "g");
+      const group_cls = `pauih-sector-g state-${sector.state}`;
+      group.setAttribute("class", group_cls);
+      const draw = sectorArc(ring, index);
+      const spin = document.createElementNS(SVG_NS, "g");
+      spin.setAttribute("transform", `rotate(${draw.rotate} ${CX} ${CY})`);
+      const arc = document.createElementNS(SVG_NS, "circle");
+      arc.setAttribute("cx", String(CX));
+      arc.setAttribute("cy", String(CY));
+      arc.setAttribute("r", String(R));
+      arc.setAttribute("stroke-width", String(draw.strokeWidth));
+      arc.setAttribute("stroke-dasharray", draw.dash);
+      arc.setAttribute("class", `pauih-sector state-${sector.state}`);
+      arc.dataset.index = String(index);
+      spin.appendChild(arc);
+      group.appendChild(spin);
+      if (index === 0 || index === total - 1) {
+        const cap = document.createElementNS(SVG_NS, "path");
+        cap.setAttribute("d", ringCapPath(ring, index === 0 ? "start" : "end", CAP_BULGE));
+        cap.setAttribute("class", `pauih-sector-cap state-${sector.state}`);
+        cap.dataset.index = String(index);
+        group.appendChild(cap);
+      }
+      svg.appendChild(group);
+      const c = sectorCentroid(ring, index);
       if (sector.img) {
         const size = 18;
         const img = document.createElementNS(SVG_NS, "image");
@@ -267,7 +295,7 @@ var WheelApp = class extends AppV2 {
         const text = document.createElementNS(SVG_NS, "text");
         text.setAttribute("x", String(c.x));
         text.setAttribute("y", String(c.y));
-        text.setAttribute("class", "pauih-label");
+        text.setAttribute("class", `pauih-label state-${sector.state}`);
         text.textContent = sector.label;
         text.dataset.index = String(index);
         svg.appendChild(text);
@@ -285,15 +313,9 @@ var WheelApp = class extends AppV2 {
     const hub = document.createElementNS(SVG_NS, "circle");
     hub.setAttribute("cx", String(CX));
     hub.setAttribute("cy", String(CY));
-    hub.setAttribute("r", String(R_INNER));
+    hub.setAttribute("r", String(R_HUB));
     hub.setAttribute("class", "pauih-hub");
     svg.appendChild(hub);
-    const rim = document.createElementNS(SVG_NS, "circle");
-    rim.setAttribute("cx", String(CX));
-    rim.setAttribute("cy", String(CY));
-    rim.setAttribute("r", String(R_INNER));
-    rim.setAttribute("class", "pauih-rim");
-    svg.appendChild(rim);
     this.#paintCapsule(svg);
     const hubText = document.createElementNS(SVG_NS, "g");
     hubText.setAttribute("class", "pauih-hub-text");
@@ -313,39 +335,50 @@ var WheelApp = class extends AppV2 {
     const v = this.level.variant;
     const canCycle = !!v && v.labels.length > 1;
     const cells = [
-      { action: "prev", glyph: "\u2039", enabled: canCycle },
+      { action: "next", glyph: "\u203A", enabled: canCycle },
       { action: "back", glyph: "\u21A9", enabled: this.level.canGoBack },
-      { action: "next", glyph: "\u203A", enabled: canCycle }
+      { action: "prev", glyph: "\u2039", enabled: canCycle }
     ];
-    const cellW = CAP_W / cells.length;
-    const left = CX - CAP_W / 2;
+    const bar = {
+      cx: CX,
+      cy: CY,
+      R,
+      W: W_CAP,
+      total: cells.length,
+      gap: CAP_SEAM / R,
+      // 缝按弧长给，换算成角
+      arcSpan: CAP_INK - 2 * capOvershoot(R, W_CAP),
+      center: Math.PI / 2
+      // 整段弧的中心指向正下方
+    };
     cells.forEach((cell, index) => {
-      const x = left + index * cellW;
-      const r = document.createElementNS(SVG_NS, "rect");
-      r.setAttribute("x", String(x));
-      r.setAttribute("y", String(CAP_TOP));
-      r.setAttribute("width", String(cellW));
-      r.setAttribute("height", String(CAP_H));
+      const group = document.createElementNS(SVG_NS, "g");
+      group.setAttribute("class", `pauih-cap-g${cell.enabled ? "" : " disabled"}`);
+      const draw = sectorArc(bar, index);
+      const spin = document.createElementNS(SVG_NS, "g");
+      spin.setAttribute("transform", `rotate(${draw.rotate} ${CX} ${CY})`);
+      const arc = document.createElementNS(SVG_NS, "circle");
+      arc.setAttribute("cx", String(CX));
+      arc.setAttribute("cy", String(CY));
+      arc.setAttribute("r", String(R));
+      arc.setAttribute("stroke-width", String(draw.strokeWidth));
+      arc.setAttribute("stroke-dasharray", draw.dash);
+      arc.setAttribute("class", "pauih-cap");
+      if (cell.enabled) arc.dataset.nav = cell.action;
+      spin.appendChild(arc);
+      group.appendChild(spin);
       if (index === 0 || index === cells.length - 1) {
-        r.setAttribute("rx", String(CAP_R));
-        r.setAttribute("ry", String(CAP_R));
+        const end = document.createElementNS(SVG_NS, "path");
+        end.setAttribute("d", ringCapPath(bar, index === 0 ? "start" : "end"));
+        end.setAttribute("class", "pauih-cap-end");
+        if (cell.enabled) end.dataset.nav = cell.action;
+        group.appendChild(end);
       }
-      r.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
-      if (cell.enabled) r.dataset.nav = cell.action;
-      svg.appendChild(r);
-      if (index === 0 || index === cells.length - 1) {
-        const patch = document.createElementNS(SVG_NS, "rect");
-        patch.setAttribute("x", String(index === 0 ? x + cellW - CAP_R : x));
-        patch.setAttribute("y", String(CAP_TOP));
-        patch.setAttribute("width", String(CAP_R));
-        patch.setAttribute("height", String(CAP_H));
-        patch.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
-        if (cell.enabled) patch.dataset.nav = cell.action;
-        svg.appendChild(patch);
-      }
+      svg.appendChild(group);
+      const c = sectorCentroid(bar, index);
       const t = document.createElementNS(SVG_NS, "text");
-      t.setAttribute("x", String(x + cellW / 2));
-      t.setAttribute("y", String(CAP_TOP + CAP_H / 2));
+      t.setAttribute("x", String(c.x));
+      t.setAttribute("y", String(c.y));
       t.setAttribute("class", `pauih-cap-glyph${cell.enabled ? "" : " disabled"}`);
       t.textContent = cell.glyph;
       svg.appendChild(t);

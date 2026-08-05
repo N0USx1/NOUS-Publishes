@@ -1,17 +1,41 @@
-import { sectorPath, sectorCentroid } from "./geometry";
+import { sectorArc, sectorCentroid, ringCapPath, capOvershoot } from "./geometry";
 import type { WheelLevel, SectorData } from "./types";
 import { wrapText } from "./text";
 import { glyphs } from "./economy";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-// 比例照 Nous 2026-08-05 的 mockup 量出来（毂/外环 ≈ 0.78，环比想象中细）
-const R_OUTER = 74;
-// 中心毂半径。★ 2026-08-05 演进：55 → 42（给长名字让路）→ 56 → 59
-// （按 mockup 实量的 0.78 比例；名字已交给毂显示，环不需要那么粗）。
-const R_INNER = 50;
 const CX = 100;
 const CY = 100;
 const SIZE = 320;   // 窗口边长（像素）
+
+/*
+ * ===== 环的几何：画笔扫掠（claude-draws skill，2026-08-05 重定）=====
+ *
+ * 只有 R_HUB / GUTTER / W 三个是**自由量**，其余全部由它们算出来。
+ * 老版本把 R_OUTER 和 R_INNER 都当自由量填，两者耦合，调环宽必须同时动两个数。
+ *
+ * 三个数对着 mockup 逐层量测校准过（分层半径对拍）：
+ *   毂 68.0% / 环内缘 73.0% / 环外缘 100%   ← 本组参数
+ *   毂 67.7% / 环内缘 72.5% / 环外缘 100%   ← mockup 实测
+ *
+ * ★ 2026-08-05 第二轮（Nous 反馈）：R_OUTER 拉到 100，也就是**顶满 viewBox**——
+ *   环的外缘就是 UI 边缘，不再留一圈空边。其余按 mockup 比例等比放大。
+ *   顺带把环宽从 20 撑到 27，没有图标、走文字标签时不再挤出环外。
+ */
+const R_HUB  = 68;                    // 中心毂半径
+const GUTTER = 5;                     // 毂与环之间的**切割**（留空，不画任何东西）
+const W      = 13.5;                  // 笔半径 → 环宽 = 2W = 27
+const R      = R_HUB + GUTTER + W;    // 环中线 = 86.5，笔尖走的那条圆
+const R_OUTER = R + W;                // 100 —— 环的外缘
+/**
+ * SVG 用户坐标系的边长。★ 由 R_OUTER 定义，不是反过来 ——
+ * 「环的外缘就是 UI 边缘」是设计意图（Nous 2026-08-05），写成 2×R_OUTER 之后
+ * 这条意图就由几何保证了：改半径，画布跟着改，环永远贴边。
+ * 旧代码写的是 `SIZE / 1.6`，那个 1.6 是个魔法数，和半径没有任何联系。
+ *
+ * 窗口像素 SIZE 与它的比值就是缩放（320 / 200 = 1.6×）。
+ */
+const VIEW = 2 * R_OUTER;
 
 const AppV2 = foundry.applications.api.ApplicationV2;
 
@@ -19,31 +43,41 @@ const AppV2 = foundry.applications.api.ApplicationV2;
 const HUB_CHARS_PER_LINE = 16;
 
 /**
- * 导航胶囊：**横着的一块圆角条**，坐在环底缺口里（Nous 2026-08-05 定）。
+ * 底部导航胶囊 —— **它就是一段带端帽的分段弧**，和外环同构。
  *
- * ★ 为什么不做成弧形：弧形要拟合极坐标去还原一个只能目测的形状，我连着三版
- *   比例都没对上。矩形＋圆角没有可估错的量，而且横条比弧形段更好点中。
+ * ★ 2026-08-05 第三轮（Nous：「可不可以用外圆弧度去掰弯这个胶囊」）：
+ *   从横排圆角条改成弧形，跟着外环的弧度走。改完之后它与外环共用同一套
+ *   `sectorArc` / `ringCapPath` / `capOvershoot`，**一个新函数都没写** ——
+ *   唯一的新东西是 RingSpec 的 `center`（整段弧的中心指向正下方）。
+ *
+ *   顺带把几何也简化了：矩形版要先算「上边角对圆心的张角」才知道缺口开多大；
+ *   弧形版全是角度加法。四个矩形量（宽 / 顶边 y / 圆角 / 肩留白）换成两个角度量。
+ *
+ *   ⚠ 当初放弃弧形的理由写的是「弧形要拟合极坐标去还原一个只能目测的形状，
+ *     连着三版比例都没对上」—— 挡路的是**目测**，不是弧形。现在不目测了。
  */
-const CAP_W = 66;        // 整条宽
-const CAP_H = 19;        // 高
-const CAP_R = 9;         // 圆角半径 ≈ 半高，两端就是半圆头
-/**
- * 顶边 y。取 164 使胶囊上半截**嵌进环带**（环底外缘 y=174），
- * 只有下半截露在环外 —— mockup 里它是"从环底切出来的一块"，不是挂在环下面的另一个牌子。
- * 第一版取 172 就是只压了 2 个单位，看上去成了浮在环下的独立药丸。
- */
-const CAP_TOP = 164;
+const CAP_H = 23;                          // 胶囊厚度（径向）
+const W_CAP = CAP_H / 2;                   // 胶囊的"笔半径"
+const CAP_SEAM = 1.6;                      // 格与格之间的缝（弧长），露底作分隔
+/** 胶囊墨迹一共跨多少角（**含**它自己两端的圆头） */
+const CAP_INK = (56 * Math.PI) / 180;
+/** 胶囊与环两端圆头之间留多少角（Nous：「端帽往两边挤挤，给胶囊挪位置」） */
+const CAP_CLEAR = (4 * Math.PI) / 180;
 
 /**
- * 环底缺口的张角（弧度）。扇区只铺 `2π - 这个值`，剩下的留给导航胶囊。
- *
- * ★ **算出来的，不是估的**：缺口两条径向切边必须在胶囊**上边角**处让开
- *   `CAP_W/2 + 留白`，否则胶囊的肩膀会压到环上。
- *   上边角离圆心的纵向距离 = CAP_TOP - CY；切边半角 θ = atan(需让开的横向距离 / 该纵距)。
- *   estimate 一个角度是当初对不上 mockup 的老毛病，这里直接解出来。
+ * 环端帽往外凸多少（1 = 满半圆，小于 1 沿切向收扁）。
+ * 当前取 1 —— 「往两边挤挤」靠的是 CAP_CLEAR 让位，不是把端帽削瘦。
+ * 这个旋钮管的是端头胖瘦，是另一个维度，需要时再调。
  */
-const CAP_GUTTER = 1;    // 胶囊肩膀与环切边之间的留白
-const GAP_ANGLE = 2 * Math.atan((CAP_W / 2 + CAP_GUTTER) / (CAP_TOP - CY));
+const CAP_BULGE = 1;
+
+/**
+ * 环底缺口 = 胶囊墨迹 ＋ 两侧留白 ＋ **环自己两端圆头多占的角**。
+ *
+ * ★ 最后一项最容易漏：圆头在笔心之外还要凸 `asin(W/R)`，每端一份。
+ *   漏掉它圆头就会侵进缺口、压住胶囊 —— 这是 2026-08-05 修掉的原始 bug。
+ */
+const GAP_ANGLE = CAP_INK + 2 * CAP_CLEAR + 2 * capOvershoot(R, W, CAP_BULGE);
 /** 扇区实际占的弧长 */
 const ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
 
@@ -148,22 +182,57 @@ export class WheelApp extends AppV2 {
     //   AppV2 对 _renderHTML 的返回值不限类型，它只是原样传给 _replaceHTML。
     async _renderHTML(): Promise<SVGElement> {
         const svg = document.createElementNS(SVG_NS, "svg");
-        svg.setAttribute("viewBox", `0 0 ${SIZE / 1.6} ${SIZE / 1.6}`);
+        svg.setAttribute("viewBox", `0 0 ${VIEW} ${VIEW}`);
         svg.setAttribute("class", "pauih-svg");
 
         const total = this.level.sectors.length;
+        const ring = { cx: CX, cy: CY, R, W, total, gap: 0.02, arcSpan: ARC_SPAN };
+
         this.level.sectors.forEach((sector, index) => {
-            const spec = { index, total, rOuter: R_OUTER, rInner: R_INNER,
-                           cx: CX, cy: CY, gap: 0.02, arcSpan: ARC_SPAN };
+            /*
+             * 一个扇区 = 一段描边弧。整组包在 <g> 里，是为了让**首尾扇区的圆头端帽**
+             * 跟着本扇区一起 hover／变色 —— 端帽是独立元素，靠 group hover 联动。
+             */
+            const group = document.createElementNS(SVG_NS, "g");
+            /* ★ 状态也挂在组上：risky 的发光要**包住整条扇区连同端帽的外轮廓**。
+               挂在各自元素上的话，两者的接缝处会各自描一圈，内部冒出发光边。 */
+            const group_cls = `pauih-sector-g state-${sector.state}`;
+            group.setAttribute("class", group_cls);
 
-            const path = document.createElementNS(SVG_NS, "path");
-            path.setAttribute("d", sectorPath(spec));
+            const draw = sectorArc(ring, index);
+            const spin = document.createElementNS(SVG_NS, "g");
+            spin.setAttribute("transform", `rotate(${draw.rotate} ${CX} ${CY})`);
+
+            const arc = document.createElementNS(SVG_NS, "circle");
+            arc.setAttribute("cx", String(CX));
+            arc.setAttribute("cy", String(CY));
+            arc.setAttribute("r", String(R));
+            arc.setAttribute("stroke-width", String(draw.strokeWidth));
+            arc.setAttribute("stroke-dasharray", draw.dash);
             // 三态各有自己的 class：risky 不变暗，只加琥珀标记（设计定档 §6.4）
-            path.setAttribute("class", `pauih-sector state-${sector.state}`);
-            path.dataset.index = String(index);
-            svg.appendChild(path);
+            arc.setAttribute("class", `pauih-sector state-${sector.state}`);
+            arc.dataset.index = String(index);
+            spin.appendChild(arc);
+            group.appendChild(spin);
 
-            const c = sectorCentroid(spec);
+            /*
+             * 环的最外两端补圆头。扇区一律 butt（相邻圆头会各凸出 asin(W/R)，
+             * 把缝隙吃掉粘成一片），只有首尾这两处该是圆的。
+             *
+             * ⚠ 补的是**半圆**不是整圆：底色半透明（--background 自带 0.9 alpha），
+             *   整圆有一半压在弧上，两层叠加会更深，端帽上浮出一道弧形接缝。
+             */
+            if (index === 0 || index === total - 1) {
+                const cap = document.createElementNS(SVG_NS, "path");
+                cap.setAttribute("d", ringCapPath(ring, index === 0 ? "start" : "end", CAP_BULGE));
+                cap.setAttribute("class", `pauih-sector-cap state-${sector.state}`);
+                cap.dataset.index = String(index);
+                group.appendChild(cap);
+            }
+
+            svg.appendChild(group);
+
+            const c = sectorCentroid(ring, index);
 
             if (sector.img) {
                 // ★ 有图标就**只画图标**：名字交给中心毂在悬停时显示，
@@ -182,7 +251,10 @@ export class WheelApp extends AppV2 {
                 const text = document.createElementNS(SVG_NS, "text");
                 text.setAttribute("x", String(c.x));
                 text.setAttribute("y", String(c.y));
-                text.setAttribute("class", "pauih-label");
+                // ★ 状态直接挂在 label 上，不靠 CSS 兄弟选择器。
+                //   扇区包进 <g> 之后 `.pauih-sector ~ .pauih-label` 的兄弟关系就断了，
+                //   那种写法会**静默失效**（灰显不再变色，且没有任何报错）。
+                text.setAttribute("class", `pauih-label state-${sector.state}`);
                 text.textContent = sector.label;
                 text.dataset.index = String(index);
                 svg.appendChild(text);
@@ -203,18 +275,19 @@ export class WheelApp extends AppV2 {
         const hub = document.createElementNS(SVG_NS, "circle");
         hub.setAttribute("cx", String(CX));
         hub.setAttribute("cy", String(CY));
-        hub.setAttribute("r", String(R_INNER));
+        hub.setAttribute("r", String(R_HUB));
         hub.setAttribute("class", "pauih-hub");
         svg.appendChild(hub);
 
-        // ★ 内圈亮色描边：mockup 里最醒目的一条，把毂和扇区环分开。
-        //   单独一个 circle 而不是给 hub 加 stroke —— 描边要压在扇区之上才不会被切断。
-        const rim = document.createElementNS(SVG_NS, "circle");
-        rim.setAttribute("cx", String(CX));
-        rim.setAttribute("cy", String(CY));
-        rim.setAttribute("r", String(R_INNER));
-        rim.setAttribute("class", "pauih-rim");
-        svg.appendChild(rim);
+        /*
+         * ⚠ 毂与环之间那圈**什么都不画**。
+         *
+         *   Nous 2026-08-05：「这个白圈应该只是一个切割，而不是真的白圈。」
+         *   mockup 是浅背景，那圈本来就是背景本身透出来 —— 它是**空的**，
+         *   不是一个浅色的环。所以这里留空，让底下的毛玻璃／场景透上来，
+         *   GUTTER 只负责把毂和环隔开。
+         *   （上一版画成了 opacity .7 的亮环，方向反了。）
+         */
 
         // 底部导航胶囊：挂在环底缺口下方，探出环外
         this.#paintCapsule(svg);
@@ -239,47 +312,64 @@ export class WheelApp extends AppV2 {
     #paintCapsule(svg: SVGElement): void {
         const v = this.level.variant;
         const canCycle = !!v && v.labels.length > 1;
+        /*
+         * ⚠ 顺序是**反的**：角度从正上方顺时针增大，所以在底部一带，
+         *   下标越大越靠左。要让 ‹ 出现在左边，它就得排在数组最后。
+         */
         const cells = [
-            { action: "prev", glyph: "‹", enabled: canCycle },
-            { action: "back", glyph: "↩", enabled: this.level.canGoBack },
             { action: "next", glyph: "›", enabled: canCycle },
+            { action: "back", glyph: "↩", enabled: this.level.canGoBack },
+            { action: "prev", glyph: "‹", enabled: canCycle },
         ];
 
-        const cellW = CAP_W / cells.length;
-        const left = CX - CAP_W / 2;
+        /*
+         * 胶囊 = 一段分成三格的弧，和外环同一条中线（所以贴合是几何保证的，不是调出来的）。
+         * 笔心跨度要从墨迹跨度里扣掉它自己两端的圆头 —— 和外环那条约束同源。
+         */
+        const bar = {
+            cx: CX,
+            cy: CY,
+            R,
+            W: W_CAP,
+            total: cells.length,
+            gap: CAP_SEAM / R,                       // 缝按弧长给，换算成角
+            arcSpan: CAP_INK - 2 * capOvershoot(R, W_CAP),
+            center: Math.PI / 2,                     // 整段弧的中心指向正下方
+        };
 
         cells.forEach((cell, index) => {
-            const x = left + index * cellW;
-            // 只有两端要圆角：中间那格是直的。用 rx 会四角全圆，
-            // 所以整条底下先垫一个圆角矩形，格子画在它上面、靠描边分隔。
-            const r = document.createElementNS(SVG_NS, "rect");
-            r.setAttribute("x", String(x));
-            r.setAttribute("y", String(CAP_TOP));
-            r.setAttribute("width", String(cellW));
-            r.setAttribute("height", String(CAP_H));
-            if (index === 0 || index === cells.length - 1) {
-                r.setAttribute("rx", String(CAP_R));
-                r.setAttribute("ry", String(CAP_R));
-            }
-            r.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
-            if (cell.enabled) r.dataset.nav = cell.action;
-            svg.appendChild(r);
+            const group = document.createElementNS(SVG_NS, "g");
+            group.setAttribute("class", `pauih-cap-g${cell.enabled ? "" : " disabled"}`);
 
-            // 两端那格的圆角会把朝内那侧也削圆，补一个方块把内侧填平
-            if (index === 0 || index === cells.length - 1) {
-                const patch = document.createElementNS(SVG_NS, "rect");
-                patch.setAttribute("x", String(index === 0 ? x + cellW - CAP_R : x));
-                patch.setAttribute("y", String(CAP_TOP));
-                patch.setAttribute("width", String(CAP_R));
-                patch.setAttribute("height", String(CAP_H));
-                patch.setAttribute("class", `pauih-cap${cell.enabled ? "" : " disabled"}`);
-                if (cell.enabled) patch.dataset.nav = cell.action;
-                svg.appendChild(patch);
-            }
+            const draw = sectorArc(bar, index);
+            const spin = document.createElementNS(SVG_NS, "g");
+            spin.setAttribute("transform", `rotate(${draw.rotate} ${CX} ${CY})`);
 
+            const arc = document.createElementNS(SVG_NS, "circle");
+            arc.setAttribute("cx", String(CX));
+            arc.setAttribute("cy", String(CY));
+            arc.setAttribute("r", String(R));
+            arc.setAttribute("stroke-width", String(draw.strokeWidth));
+            arc.setAttribute("stroke-dasharray", draw.dash);
+            arc.setAttribute("class", "pauih-cap");
+            if (cell.enabled) arc.dataset.nav = cell.action;
+            spin.appendChild(arc);
+            group.appendChild(spin);
+
+            // 两端补半圆帽（同外环：整圆会和弧身叠出更深的一块）
+            if (index === 0 || index === cells.length - 1) {
+                const end = document.createElementNS(SVG_NS, "path");
+                end.setAttribute("d", ringCapPath(bar, index === 0 ? "start" : "end"));
+                end.setAttribute("class", "pauih-cap-end");
+                if (cell.enabled) end.dataset.nav = cell.action;
+                group.appendChild(end);
+            }
+            svg.appendChild(group);
+
+            const c = sectorCentroid(bar, index);
             const t = document.createElementNS(SVG_NS, "text");
-            t.setAttribute("x", String(x + cellW / 2));
-            t.setAttribute("y", String(CAP_TOP + CAP_H / 2));
+            t.setAttribute("x", String(c.x));
+            t.setAttribute("y", String(c.y));
             t.setAttribute("class", `pauih-cap-glyph${cell.enabled ? "" : " disabled"}`);
             t.textContent = cell.glyph;
             svg.appendChild(t);
