@@ -4,7 +4,8 @@ import { resolveActor } from "./target";
 import { collectStrikes } from "./collectors/strikes";
 import { collectActions } from "./collectors/actions";
 import { collectClassAbilities, className } from "./collectors/class-abilities";
-import { rollStrike, execAuxiliary, useAction } from "./executor";
+import { collectSpellEntries, collectSpells } from "./collectors/spells";
+import { rollStrike, execAuxiliary, useAction, castSpell } from "./executor";
 import { registerUsageSetting, bump as bumpUsage } from "./usage";
 import * as economy from "./economy";
 import type { WheelLevel } from "./types";
@@ -131,6 +132,35 @@ function openAt(x: number, y: number): void {
             return;
         }
 
+        // —— 分类层 → 法术条目层 ——
+        if (s.id === "spells") {
+            const sectors = collectSpellEntries(actor);
+            if (!sectors.length) {
+                ui.notifications.info("This character has no spells to cast.");
+                return;
+            }
+            openWheel!.rebuild = undefined;
+            void openWheel!.setLevel({ title: "Spells", canGoBack: true, sectors });
+            return;
+        }
+
+        // —— 法术条目层 → 具体法术层 ——
+        if (s.id.startsWith("spellentry:")) {
+            const entryId = s.id.slice("spellentry:".length);
+            const sectors = collectSpells(actor, entryId);
+            if (!sectors.length) {
+                ui.notifications.info("That spellcasting entry has no spells.");
+                return;
+            }
+            void openWheel!.setLevel({
+                title: s.label,
+                canGoBack: true,
+                paging: { page: 0 },
+                sectors,
+            });
+            return;
+        }
+
         // —— 打击层 → 分类层 ——
         if (s.id === "__back") {
             // 分类层是四个写死的格子，没有随角色变的东西 → 撤掉重算回调
@@ -190,6 +220,19 @@ function openAt(x: number, y: number): void {
             }
             // 对照表 §6：职业能力走 rollItemMacro（selfEffect / TokenMark 自动生效）
             void (game as any).pf2e.rollItemMacro(item.uuid).then(() => openWheel?.close());
+            return;
+        }
+
+        // —— 法术层：施放 ——
+        if (s.id.startsWith("spell:")) {
+            // id 形如 `spell:<entryId>:<spellId>`
+            const [, entryId, spellId] = s.id.split(":");
+            const round = currentRound(actor);
+            if (round !== null) {
+                if (s.cost === "reaction") economy.spendReaction(actor.id, round);
+                else economy.spend(actor.id, round, economy.costToPoints(s.cost));
+            }
+            void castSpell(actor, entryId, spellId).then(() => openWheel?.close());
             return;
         }
 

@@ -102,6 +102,33 @@ export async function execAuxiliary(
 }
 
 /**
+ * 施放一个法术。
+ * 对照表 §6：`spell.spellcasting.cast(spell, {rank, slotId})`。
+ *
+ * ⚠ **`rank` 用 pf2e 自己算好的 `spell.rank`，我们不推算提升环位** ——
+ *   实测戏法 `baseRank: 1` 而 `rank: 3`（系统自动升到角色最高环）。
+ *   自己算等于把规则搬进来一份，那正是本模组明确不做的事。
+ */
+export async function castSpell(
+    actor: ActorPF2e | null,
+    entryId: string,
+    spellId: string,
+): Promise<void> {
+    try {
+        const entry = (actor as any)?.spellcasting?.get?.(entryId);
+        const spell = entry?.spells?.get?.(spellId);
+        if (!entry || !spell) {
+            ui.notifications.warn("That spell is no longer available — reopen the wheel.");
+            return;
+        }
+        await entry.cast(spell, { rank: spell.rank });
+    } catch (err) {
+        console.error("player-action-ui-hub | castSpell 失败", err);
+        ui.notifications.error("Casting failed — see the console for details.");
+    }
+}
+
+/**
  * 执行一个通用/技能动作。
  * 对照表 §6：`game.pf2e.actions.get(slug).use({ actors, event })`。
  *

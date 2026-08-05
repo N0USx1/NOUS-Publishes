@@ -872,6 +872,85 @@ function collectClassAbilities(actor) {
 }
 __name(collectClassAbilities, "collectClassAbilities");
 
+// src/collectors/spells.ts
+function usableEntries(entries) {
+  return entries.filter((e) => (e.spellCount ?? 0) > 0);
+}
+__name(usableEntries, "usableEntries");
+function focusBadge(pool) {
+  if (!pool || pool.max <= 0) return void 0;
+  return `\u2726 ${pool.value}/${pool.max}`;
+}
+__name(focusBadge, "focusBadge");
+function slotBadge(slot) {
+  if (!slot || slot.max <= 0) return void 0;
+  return `\u25C8 ${slot.value}/${slot.max}`;
+}
+__name(slotBadge, "slotBadge");
+function spellCost(spell) {
+  switch (spell.actionGlyph) {
+    case "1":
+      return "1";
+    case "2":
+      return "2";
+    case "3":
+      return "3";
+    case "R":
+      return "reaction";
+    case "F":
+      return "free";
+    default:
+      return null;
+  }
+}
+__name(spellCost, "spellCost");
+function collectSpellEntries(actor) {
+  try {
+    const contents = actor?.spellcasting?.contents ?? [];
+    const entries = contents.map((e) => ({
+      id: e.id,
+      name: e.name,
+      category: e.category ?? e.system?.prepared?.value,
+      isFocusPool: e.isFocusPool,
+      spellCount: e.spells?.size ?? 0
+    }));
+    const pool = actor?.system?.resources?.focus ?? null;
+    return usableEntries(entries).map((e) => ({
+      id: `spellentry:${e.id}`,
+      label: e.name,
+      cost: null,
+      state: "normal",
+      badge: e.isFocusPool ? focusBadge(pool) : void 0
+    }));
+  } catch (err) {
+    console.error("player-action-ui-hub | collectSpellEntries \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(collectSpellEntries, "collectSpellEntries");
+function collectSpells(actor, entryId) {
+  try {
+    const entry = actor?.spellcasting?.get?.(entryId);
+    if (!entry) return [];
+    const slots = entry.system?.slots ?? {};
+    return [...entry.spells ?? []].map((s) => {
+      const slot = s.isCantrip || s.isFocusSpell ? null : slots[`slot${s.rank}`] ?? null;
+      return {
+        id: `spell:${entryId}:${s.id}`,
+        label: s.name,
+        img: s.img,
+        cost: spellCost(s),
+        state: "normal",
+        badge: slotBadge(slot)
+      };
+    });
+  } catch (err) {
+    console.error("player-action-ui-hub | collectSpells \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(collectSpells, "collectSpells");
+
 // src/executor.ts
 function findStrike(actor, strikeId) {
   return strikesOf(actor).find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
@@ -918,6 +997,21 @@ async function execAuxiliary(actor, strikeId, auxIndex) {
   }
 }
 __name(execAuxiliary, "execAuxiliary");
+async function castSpell(actor, entryId, spellId) {
+  try {
+    const entry = actor?.spellcasting?.get?.(entryId);
+    const spell = entry?.spells?.get?.(spellId);
+    if (!entry || !spell) {
+      ui.notifications.warn("That spell is no longer available \u2014 reopen the wheel.");
+      return;
+    }
+    await entry.cast(spell, { rank: spell.rank });
+  } catch (err) {
+    console.error("player-action-ui-hub | castSpell \u5931\u8D25", err);
+    ui.notifications.error("Casting failed \u2014 see the console for details.");
+  }
+}
+__name(castSpell, "castSpell");
 async function useAction(actor, slug, event) {
   try {
     const action = game.pf2e?.actions?.get(slug);
@@ -1019,6 +1113,31 @@ function openAt(x, y) {
       });
       return;
     }
+    if (s.id === "spells") {
+      const sectors = collectSpellEntries(actor);
+      if (!sectors.length) {
+        ui.notifications.info("This character has no spells to cast.");
+        return;
+      }
+      openWheel.rebuild = void 0;
+      void openWheel.setLevel({ title: "Spells", canGoBack: true, sectors });
+      return;
+    }
+    if (s.id.startsWith("spellentry:")) {
+      const entryId = s.id.slice("spellentry:".length);
+      const sectors = collectSpells(actor, entryId);
+      if (!sectors.length) {
+        ui.notifications.info("That spellcasting entry has no spells.");
+        return;
+      }
+      void openWheel.setLevel({
+        title: s.label,
+        canGoBack: true,
+        paging: { page: 0 },
+        sectors
+      });
+      return;
+    }
     if (s.id === "__back") {
       openWheel.rebuild = void 0;
       void openWheel.setLevel(level);
@@ -1056,6 +1175,16 @@ function openAt(x, y) {
         else spend(actor.id, round, costToPoints(s.cost));
       }
       void game.pf2e.rollItemMacro(item.uuid).then(() => openWheel?.close());
+      return;
+    }
+    if (s.id.startsWith("spell:")) {
+      const [, entryId, spellId] = s.id.split(":");
+      const round = currentRound(actor);
+      if (round !== null) {
+        if (s.cost === "reaction") spendReaction(actor.id, round);
+        else spend(actor.id, round, costToPoints(s.cost));
+      }
+      void castSpell(actor, entryId, spellId).then(() => openWheel?.close());
       return;
     }
     ui.notifications.info(`"${s.label}" is not implemented yet.`);
