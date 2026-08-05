@@ -2,10 +2,10 @@ import type { ActorPF2e, ItemPF2e } from "foundry-pf2e";
 import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
 import {
-    collectStrikes, collectActions, collectClassAbilities, className,
-    collectSpellEntries, collectSpells,
+    collectStrikes, collectActions, collectSkills, collectSkillActions,
+    collectClassAbilities, className, collectSpellEntries, collectSpells,
 } from "./collectors";
-import { rollStrike, execAuxiliary, useAction, castSpell } from "./executor";
+import { rollStrike, execAuxiliary, useAction, castSpell, rollSkill } from "./executor";
 import { registerUsageSetting, bump as bumpUsage } from "./usage";
 import { classStateLines, readClassState } from "./class-state";
 import * as economy from "./economy";
@@ -86,6 +86,7 @@ function openAt(x: number, y: number): void {
     const counts = {
         strikes: collectStrikes(actor).length,
         actions: collectActions(actor).length,
+        skills: collectSkills(actor).length,
         class: collectClassAbilities(actor).length,
         spells: collectSpellEntries(actor).length,
     };
@@ -102,6 +103,7 @@ function openAt(x: number, y: number): void {
         sectors: [
             cat("strikes", "Strikes"),
             cat("actions", "Actions"),
+            cat("skills", "Skills"),
             cat("class", "Class"),
             cat("spells", "Spells"),
         ],
@@ -153,6 +155,43 @@ function openAt(x: number, y: number): void {
                 paging: { page: 0 },
                 sectors,
             });
+            return;
+        }
+
+        // —— 分类层 → 技能层 ——
+        if (s.id === "skills") {
+            const sectors = collectSkills(actor);
+            if (!sectors.length) {
+                ui.notifications.info("This character has no skills.");
+                return;
+            }
+            openWheel!.rebuild = undefined;
+            void openWheel!.setLevel({
+                title: "Skills", canGoBack: true, paging: { page: 0 }, sectors,
+            });
+            return;
+        }
+
+        // —— 技能层 → 该技能的检定与动作 ——
+        if (s.id.startsWith("skill:")) {
+            const slug = s.id.slice("skill:".length);
+            const sectors = collectSkillActions(actor, slug);
+            if (!sectors.length) {
+                ui.notifications.info("Nothing available for that skill.");
+                return;
+            }
+            void openWheel!.setLevel({
+                title: s.label, canGoBack: true, paging: { page: 0 }, sectors,
+            });
+            return;
+        }
+
+        // —— 技能层：掷裸检定 ——
+        if (s.id.startsWith("skillcheck:")) {
+            const slug = s.id.slice("skillcheck:".length);
+            // ⚠ 裸检定**不扣动作点**：掷一次技能本身不是一个动作，
+            //   花几个动作取决于你用它做什么（那由具体动作决定）。
+            void rollSkill(actor, slug, ev).then(() => openWheel?.close());
             return;
         }
 

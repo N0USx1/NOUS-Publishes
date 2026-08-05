@@ -2,7 +2,7 @@
   "id": "player-action-ui-hub",
   "title": "Player Action UI Hub",
   "description": "A player-side radial action hub for Pathfinder 2e: summon a wheel at your cursor, drill from category to action, and act 鈥?with your class state shown at the center.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "authors": [
     {
       "name": "NOUS"

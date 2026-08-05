@@ -1,6 +1,7 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import type { SectorData } from "../types";
 import { usage, promotedRank } from "../usage";
+import { isSkillAction } from "./skills";
 
 /**
  * `game.pf2e.actions` 里一条动作的形状。
@@ -159,7 +160,10 @@ export function collectActions(actor: ActorPF2e | null): SectorData[] {
         //   `actions` 这个集合没有声明。**只在这一处**，不许扩散。
         const coll = (game as any).pf2e?.actions;
         if (!coll) return [];
-        const raw: RawAction[] = [...coll.values()];
+        // ★ 技能动作已分到 Skills 那一格去了（Nous 2026-08-05）：
+        //   67 条挤成 10 页，而"撬锁"这种玩家心里想的是"掷巧手"，
+        //   跟"翻滚穿过"这类战术动作放一起找不着。判据见 skills.ts 的 isSkillAction。
+        const raw: RawAction[] = [...coll.values()].filter(a => !isSkillAction(a));
         const rankOf = (slug: string): number =>
             (actor?.getStatistic?.(slug) as { rank?: number } | null)?.rank ?? 0;
         // 玩家自己的常用区 —— 压过冷启动清单与分档，但**位置只增不改**

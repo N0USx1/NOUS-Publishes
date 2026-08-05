@@ -7,5 +7,6 @@
  */
 export { collectStrikes } from "./strikes";
 export { collectActions } from "./actions";
+export { collectSkills, collectSkillActions } from "./skills";
 export { collectClassAbilities, className } from "./class-abilities";
 export { collectSpellEntries, collectSpells } from "./spells";

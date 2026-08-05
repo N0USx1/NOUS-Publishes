@@ -102,6 +102,53 @@ export async function execAuxiliary(
 }
 
 /**
+ * 掷一次裸技能检定。
+ *
+ * ★ 存在的理由是 Nous 2026-08-05 的观察：**"撬锁"玩家心里想的是"掷巧手"**。
+ *   技能层的第一格给的就是这个 —— 不用先找到某个具体动作才能掷。
+ *   对照表 §6：`actor.getStatistic(slug).roll({ event })`。
+ */
+export async function rollSkill(
+    actor: ActorPF2e | null,
+    slug: string,
+    event: Event,
+): Promise<void> {
+    try {
+        const stat = (actor as any)?.getStatistic?.(slug);
+        if (!stat) {
+            ui.notifications.warn("This character has no such skill.");
+            return;
+        }
+        /*
+         * ⚠⚠ **这条路径不能传 `event`** —— 与 `variant.roll()` 正好相反（2026-08-05 实测）。
+         *
+         *   四种组合逐个试出来的（`showCheckDialogs` 为真时）：
+         *     只传 `skipDialog: true`              → 出结果、无框  ✓
+         *     `event`(无 shift) + `skipDialog:true` → 无结果、弹框  ✗
+         *     `event`(有 shift) + `skipDialog:true` → 无结果、弹框  ✗
+         *     只传 `event`                          → 无结果、弹框  ✗
+         *
+         *   **只要 `event` 在，`skipDialog` 就完全失效**，与 shift 是什么无关 ——
+         *   不是两个参数打架，是 `event` 一出现就接管了整个判断。
+         *
+         *   所以打击那边靠 `intentEvent` 反解 shift、这边靠 `skipDialog`，
+         *   **两条路径必须分开写**。我最初照搬打击的写法，白改了两轮。
+         *
+         * ⚠ 不传 event 的代价：生态模组拿不到检定上下文。对技能检定可以接受 ——
+         *   Toolbelt 的自动掩护只包攻击检定，与这里无关（设计定档 §6.3）。
+         *   将来若有模组要听技能检定，这里要重新权衡。
+         *
+         * 立场不变：默认跳过加值框（省掉多余那一步），按住 Shift 才弹。
+         */
+        const wantsDialog = !!(event as MouseEvent | null)?.shiftKey;
+        await stat.roll({ skipDialog: !wantsDialog });
+    } catch (err) {
+        console.error("player-action-ui-hub | rollSkill 失败", err);
+        ui.notifications.error("The check failed — see the console for details.");
+    }
+}
+
+/**
  * 施放一个法术。
  * 对照表 §6：`spell.spellcasting.cast(spell, {rank, slotId})`。
  *

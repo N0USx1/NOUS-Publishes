@@ -747,6 +747,89 @@ function promotedRank(rec) {
 }
 __name(promotedRank, "promotedRank");
 
+// src/collectors/skills.ts
+function isSkillAction(a) {
+  if (a.section === "basic" || a.section === "specialty-basic") return false;
+  if (a.section === "skill") return true;
+  return statisticList(a.statistic).filter(Boolean).length > 0;
+}
+__name(isSkillAction, "isSkillAction");
+function rankSkills(list) {
+  return [...list].sort((x, y) => (y.rank > 0 ? 1 : 0) - (x.rank > 0 ? 1 : 0) || y.rank - x.rank || x.label.localeCompare(y.label));
+}
+__name(rankSkills, "rankSkills");
+function rankAbbr(rank) {
+  return ["U", "T", "E", "M", "L"][rank] ?? "U";
+}
+__name(rankAbbr, "rankAbbr");
+function collectSkills(actor) {
+  try {
+    const a = actor;
+    const skills = a?.skills ?? {};
+    const coll = game.pf2e?.actions;
+    const raw = coll ? [...coll.values()] : [];
+    const countBySkill = /* @__PURE__ */ new Map();
+    for (const act of raw) {
+      if (!isSkillAction(act) || act.traits?.includes("downtime")) continue;
+      for (const st of statisticList(act.statistic).filter(Boolean)) {
+        countBySkill.set(st, (countBySkill.get(st) ?? 0) + 1);
+      }
+    }
+    const entries = Object.entries(skills).map(([slug, s]) => ({
+      slug,
+      label: String(s?.label ?? slug),
+      rank: s?.rank ?? 0,
+      mod: s?.mod ?? 0,
+      actionCount: countBySkill.get(slug) ?? 0
+    }));
+    return rankSkills(entries).map((s) => ({
+      id: `skill:${s.slug}`,
+      label: s.label,
+      cost: null,
+      state: "normal",
+      // 修正值与熟练度：玩家最想先看到的就是这两个数
+      badge: `${s.mod >= 0 ? "+" : ""}${s.mod} ${rankAbbr(s.rank)}`
+    }));
+  } catch (err) {
+    console.error("player-action-ui-hub | collectSkills \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(collectSkills, "collectSkills");
+function collectSkillActions(actor, skillSlug) {
+  try {
+    const a = actor;
+    const stat = a?.getStatistic?.(skillSlug);
+    const out = [];
+    if (stat) {
+      out.push({
+        id: `skillcheck:${skillSlug}`,
+        label: `${stat.label} Check`,
+        cost: null,
+        state: "normal",
+        badge: `${stat.mod >= 0 ? "+" : ""}${stat.mod}`
+      });
+    }
+    const coll = game.pf2e?.actions;
+    for (const act of coll ? [...coll.values()] : []) {
+      if (!isSkillAction(act) || act.traits?.includes("downtime")) continue;
+      if (!statisticList(act.statistic).includes(skillSlug)) continue;
+      out.push({
+        id: `action:${act.slug}`,
+        label: game.i18n.localize(act.name),
+        img: act.img,
+        cost: costToSectorCost(act.cost),
+        state: "normal"
+      });
+    }
+    return out;
+  } catch (err) {
+    console.error("player-action-ui-hub | collectSkillActions \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(collectSkillActions, "collectSkillActions");
+
 // src/collectors/actions.ts
 function costToSectorCost(cost) {
   if (cost === 1 || cost === "1") return "1";
@@ -808,7 +891,7 @@ function collectActions(actor) {
   try {
     const coll = game.pf2e?.actions;
     if (!coll) return [];
-    const raw = [...coll.values()];
+    const raw = [...coll.values()].filter((a) => !isSkillAction(a));
     const rankOf = /* @__PURE__ */ __name((slug) => actor?.getStatistic?.(slug)?.rank ?? 0, "rankOf");
     const front = promotedRank(usage());
     return rankActions(raw, rankOf, front).map((a) => ({
@@ -1016,6 +1099,21 @@ async function execAuxiliary(actor, strikeId, auxIndex) {
   }
 }
 __name(execAuxiliary, "execAuxiliary");
+async function rollSkill(actor, slug, event) {
+  try {
+    const stat = actor?.getStatistic?.(slug);
+    if (!stat) {
+      ui.notifications.warn("This character has no such skill.");
+      return;
+    }
+    const wantsDialog = !!event?.shiftKey;
+    await stat.roll({ skipDialog: !wantsDialog });
+  } catch (err) {
+    console.error("player-action-ui-hub | rollSkill \u5931\u8D25", err);
+    ui.notifications.error("The check failed \u2014 see the console for details.");
+  }
+}
+__name(rollSkill, "rollSkill");
 async function castSpell(actor, entryId, spellId) {
   try {
     const entry = actor?.spellcasting?.get?.(entryId);
@@ -1122,6 +1220,7 @@ function openAt(x, y) {
   const counts = {
     strikes: collectStrikes(actor).length,
     actions: collectActions(actor).length,
+    skills: collectSkills(actor).length,
     class: collectClassAbilities(actor).length,
     spells: collectSpellEntries(actor).length
   };
@@ -1138,6 +1237,7 @@ function openAt(x, y) {
     sectors: [
       cat("strikes", "Strikes"),
       cat("actions", "Actions"),
+      cat("skills", "Skills"),
       cat("class", "Class"),
       cat("spells", "Spells")
     ]
@@ -1181,6 +1281,41 @@ function openAt(x, y) {
         paging: { page: 0 },
         sectors
       });
+      return;
+    }
+    if (s.id === "skills") {
+      const sectors = collectSkills(actor);
+      if (!sectors.length) {
+        ui.notifications.info("This character has no skills.");
+        return;
+      }
+      openWheel.rebuild = void 0;
+      void openWheel.setLevel({
+        title: "Skills",
+        canGoBack: true,
+        paging: { page: 0 },
+        sectors
+      });
+      return;
+    }
+    if (s.id.startsWith("skill:")) {
+      const slug = s.id.slice("skill:".length);
+      const sectors = collectSkillActions(actor, slug);
+      if (!sectors.length) {
+        ui.notifications.info("Nothing available for that skill.");
+        return;
+      }
+      void openWheel.setLevel({
+        title: s.label,
+        canGoBack: true,
+        paging: { page: 0 },
+        sectors
+      });
+      return;
+    }
+    if (s.id.startsWith("skillcheck:")) {
+      const slug = s.id.slice("skillcheck:".length);
+      void rollSkill(actor, slug, ev).then(() => openWheel?.close());
       return;
     }
     if (s.id === "spells") {
