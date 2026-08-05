@@ -8,7 +8,8 @@
     "watch": "esbuild src/main.ts --bundle --format=esm --keep-names --sourcemap --outfile=scripts/main.js --watch",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "guard": "npm run check && npm run build && npm run test"
+    "guard": "npm run check && npm run build && npm run test",
+    "test:e2e": "node tests/e2e/smoke.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
