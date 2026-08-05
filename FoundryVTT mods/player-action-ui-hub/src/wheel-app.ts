@@ -2,6 +2,7 @@ import { sectorArc, sectorCentroid, ringCapPath, capOvershoot } from "./geometry
 import type { WheelLevel, SectorData } from "./types";
 import { wrapText } from "./text";
 import { glyphs } from "./economy";
+import { pageOf, pageCount, normalizePage } from "./paging";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const CX = 100;
@@ -185,10 +186,20 @@ export class WheelApp extends AppV2 {
         svg.setAttribute("viewBox", `0 0 ${VIEW} ${VIEW}`);
         svg.setAttribute("class", "pauih-svg");
 
-        const total = this.level.sectors.length;
+        /*
+         * ★ **几何位置与数据下标是两回事**，这里必须分开：
+         *   - `pos`   = 这一格在**当前页**里排第几，几何（角度、端帽）用它；
+         *   - `index` = 它在 `level.sectors` **全量**里的下标，`data-index` 存它。
+         *
+         *   混用会静默错位：第 2 页第 1 格的 pos 是 0，若把 0 写进 data-index，
+         *   点它执行的就是第 1 页的第 1 个。分派逻辑读的是 data-index，
+         *   所以这么分开之后 `#onClick`／`#onHover` 一行都不用改。
+         */
+        const visible = this.#visibleSectors();
+        const total = visible.length;
         const ring = { cx: CX, cy: CY, R, W, total, gap: 0.02, arcSpan: ARC_SPAN };
 
-        this.level.sectors.forEach((sector, index) => {
+        visible.forEach(({ sector, index }, pos) => {
             /*
              * 一个扇区 = 一段描边弧。整组包在 <g> 里，是为了让**首尾扇区的圆头端帽**
              * 跟着本扇区一起 hover／变色 —— 端帽是独立元素，靠 group hover 联动。
@@ -199,7 +210,7 @@ export class WheelApp extends AppV2 {
             const group_cls = `pauih-sector-g state-${sector.state}`;
             group.setAttribute("class", group_cls);
 
-            const draw = sectorArc(ring, index);
+            const draw = sectorArc(ring, pos);
             const spin = document.createElementNS(SVG_NS, "g");
             spin.setAttribute("transform", `rotate(${draw.rotate} ${CX} ${CY})`);
 
@@ -222,9 +233,10 @@ export class WheelApp extends AppV2 {
              * ⚠ 补的是**半圆**不是整圆：底色半透明（--background 自带 0.9 alpha），
              *   整圆有一半压在弧上，两层叠加会更深，端帽上浮出一道弧形接缝。
              */
-            if (index === 0 || index === total - 1) {
+            // 端帽只补在**这一页**的首尾两格上（用 pos，不是全量下标）
+            if (pos === 0 || pos === total - 1) {
                 const cap = document.createElementNS(SVG_NS, "path");
-                cap.setAttribute("d", ringCapPath(ring, index === 0 ? "start" : "end", CAP_BULGE));
+                cap.setAttribute("d", ringCapPath(ring, pos === 0 ? "start" : "end", CAP_BULGE));
                 cap.setAttribute("class", `pauih-sector-cap state-${sector.state}`);
                 cap.dataset.index = String(index);
                 group.appendChild(cap);
@@ -232,7 +244,7 @@ export class WheelApp extends AppV2 {
 
             svg.appendChild(group);
 
-            const c = sectorCentroid(ring, index);
+            const c = sectorCentroid(ring, pos);
 
             if (sector.img) {
                 // ★ 有图标就**只画图标**：名字交给中心毂在悬停时显示，
@@ -310,8 +322,9 @@ export class WheelApp extends AppV2 {
      * 没得翻时箭头置灰不可点，但格子照画，免得胶囊忽宽忽窄。
      */
     #paintCapsule(svg: SVGElement): void {
-        const v = this.level.variant;
-        const canCycle = !!v && v.labels.length > 1;
+        // ⚠ 判据要跟着 #arrowMode 走，不能只看 variant ——
+        //   否则动作层（有分页、无 MAP）的箭头会是灰的、点不动。
+        const canCycle = this.#arrowMode() !== "none";
         /*
          * ⚠ 顺序是**反的**：角度从正上方顺时针增大，所以在底部一带，
          *   下标越大越靠左。要让 ‹ 出现在左边，它就得排在数组最后。
@@ -425,7 +438,16 @@ export class WheelApp extends AppV2 {
         //   把它显示出来正是本模组的根理（设计定档 §0）。
         //   这行原本在毂里，把翻选箭头挪进底部胶囊时被一起删掉了，是那次改版的漏网。
         //   （`.pauih-variant` 的样式当时留了下来，所以这里不需要新样式。）
-        if (this.level.variant?.labels.length) {
+        //
+        // 分页层则在同一位置显示页码 —— 两者不会同时出现：
+        // 箭头归谁管由 #arrowMode 决定，这里跟着它走，**读数和箭头永远说的是同一件事**。
+        // （分开判断的话会出现"箭头在翻页、读数却显示 MAP"这种自相矛盾的状态。）
+        const mode = this.#arrowMode();
+        if (mode === "page") {
+            const total = this.#pageCount();
+            line(`${normalizePage(this.level.paging!.page, total) + 1} / ${total}`,
+                 CY + 16, "pauih-variant");
+        } else if (this.level.variant?.labels.length) {
             const v = this.level.variant;
             line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
         }
@@ -472,6 +494,30 @@ export class WheelApp extends AppV2 {
         return this.level.variant?.index ?? 0;
     }
 
+    /**
+     * 当前页要画的扇区，**带上它们在全量里的下标**。
+     * 没有分页状态时就是全部（下标即位置）。
+     */
+    #visibleSectors(): { sector: SectorData; index: number }[] {
+        const all = this.level.sectors.map((sector, index) => ({ sector, index }));
+        return this.level.paging ? pageOf(all, this.level.paging.page) : all;
+    }
+
+    /** 这一层总共几页；没有分页状态时恒为 1。 */
+    #pageCount(): number {
+        return this.level.paging ? pageCount(this.level.sectors.length) : 1;
+    }
+
+    /**
+     * 胶囊的 `‹ ›` 现在管什么。**分页优先于 MAP 翻选** ——
+     * 两者抢同一对箭头，一层不该同时开（见 types.ts 的 paging 注释）。
+     */
+    #arrowMode(): "page" | "variant" | "none" {
+        if (this.level.paging && this.#pageCount() > 1) return "page";
+        if ((this.level.variant?.labels.length ?? 0) > 1) return "variant";
+        return "none";
+    }
+
     _replaceHTML(result: SVGElement, content: HTMLElement): void {
         content.replaceChildren(result);
         content.addEventListener("click", this.#onClick);
@@ -499,11 +545,19 @@ export class WheelApp extends AppV2 {
         // —— 底部胶囊导航：‹ 上一项 · ↩ 返回 · › 下一项 ——
         const nav = el?.dataset?.nav;
         if (nav) {
-            const v = this.level.variant;
-            if ((nav === "prev" || nav === "next") && v && v.labels.length) {
-                // 后退写成 +(n-1) 而不是 -1：JS 的 % 对负数返回负值，直接减会得到 -1。
-                v.index = (v.index + (nav === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
-                void this.render(false);
+            if (nav === "prev" || nav === "next") {
+                const delta = nav === "next" ? 1 : -1;
+                const mode = this.#arrowMode();
+                if (mode === "page" && this.level.paging) {
+                    // 直接加减一，越界由 pageOf 回环 —— 边界判断收在 paging.ts 里
+                    this.level.paging.page += delta;
+                    void this.render(false);
+                } else if (mode === "variant" && this.level.variant) {
+                    const v = this.level.variant;
+                    // 后退写成 +(n-1) 而不是 -1：JS 的 % 对负数返回负值，直接减会得到 -1。
+                    v.index = (v.index + (delta === 1 ? 1 : v.labels.length - 1)) % v.labels.length;
+                    void this.render(false);
+                }
             } else if (nav === "undo") {
                 this.onUndo?.();
                 void this.render(false);

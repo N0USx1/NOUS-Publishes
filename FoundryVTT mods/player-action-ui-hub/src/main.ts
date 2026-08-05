@@ -2,7 +2,9 @@ import type { ActorPF2e, ItemPF2e } from "foundry-pf2e";
 import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
 import { collectStrikes } from "./collectors/strikes";
-import { rollStrike, execAuxiliary } from "./executor";
+import { collectActions } from "./collectors/actions";
+import { rollStrike, execAuxiliary, useAction } from "./executor";
+import { registerUsageSetting, bump as bumpUsage } from "./usage";
 import * as economy from "./economy";
 import type { WheelLevel } from "./types";
 
@@ -93,6 +95,24 @@ function openAt(x: number, y: number): void {
             return;
         }
 
+        // —— 分类层 → 动作层 ——
+        if (s.id === "actions") {
+            const sectors = collectActions(actor);
+            if (!sectors.length) {
+                ui.notifications.info("No general actions are available.");
+                return;
+            }
+            // 动作层不随角色数据变（熟练度不会在一回合里改），不接 rebuild
+            openWheel!.rebuild = undefined;
+            void openWheel!.setLevel({
+                title: "Actions",
+                canGoBack: true,
+                paging: { page: 0 },
+                sectors,
+            });
+            return;
+        }
+
         // —— 打击层 → 分类层 ——
         if (s.id === "__back") {
             // 分类层是四个写死的格子，没有随角色变的东西 → 撤掉重算回调
@@ -123,6 +143,19 @@ function openAt(x: number, y: number): void {
             return;
         }
 
+        // —— 动作层：执行 ——
+        if (s.id.startsWith("action:")) {
+            const slug = s.id.slice("action:".length);
+            // ★ 记一笔使用 —— 下次这个动作会往前排。排序依据来自玩家真实做过的事，
+            //   而不是我们猜的清单（见 usage.ts 顶部）。
+            bumpUsage(slug);
+            const round = currentRound(actor);
+            if (round !== null) economy.spend(actor.id, round, economy.costToPoints(s.cost));
+            // 终结类动作：执行完这一步就做完了，关盘
+            void useAction(actor, slug, ev).then(() => openWheel?.close());
+            return;
+        }
+
         ui.notifications.info(`"${s.label}" is not implemented yet.`);
     });
     openWheel.economy = () => {
@@ -139,6 +172,9 @@ function openAt(x: number, y: number): void {
 
 Hooks.once("init", () => {
     console.log(`${MODULE_ID} | init`);
+
+    // 动作使用记录：排序要靠它，必须在任何采集之前注册好
+    registerUsageSetting();
 
     // 可改绑按键：浏览器/Mac 玩家的逃生口，与 Ctrl+左键等效。
     game.keybindings.register(MODULE_ID, "openWheel", {

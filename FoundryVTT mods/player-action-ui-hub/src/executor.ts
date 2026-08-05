@@ -100,3 +100,29 @@ export async function execAuxiliary(
         ui.notifications.error("The action failed — see the console for details.");
     }
 }
+
+/**
+ * 执行一个通用/技能动作。
+ * 对照表 §6：`game.pf2e.actions.get(slug).use({ actors, event })`。
+ *
+ * ⚠ 同样传"意图事件"而不是原始点击 —— 理由与 `rollStrike` 完全一致：
+ *   呼出轮盘用的 Ctrl 会被 pf2e 读成暗骰开关（`sheet/helpers.ts:145`）。
+ */
+export async function useAction(
+    actor: ActorPF2e | null,
+    slug: string,
+    event: Event,
+): Promise<void> {
+    try {
+        // ⚠ 局部豁免同 collectors/actions.ts：类型包没有声明 `game.pf2e.actions`
+        const action = (game as any).pf2e?.actions?.get(slug);
+        if (!action) {
+            ui.notifications.warn("That action is not available in this world.");
+            return;
+        }
+        await action.use({ actors: actor ? [actor] : [], event: intentEvent(event) });
+    } catch (err) {
+        console.error("player-action-ui-hub | useAction 失败", err);
+        ui.notifications.error("The action failed — see the console for details.");
+    }
+}

@@ -145,6 +145,24 @@ function glyphs(remainingCount) {
 }
 __name(glyphs, "glyphs");
 
+// src/paging.ts
+var PAGE_SIZE = 7;
+function pageCount(total) {
+  return Math.max(1, Math.ceil(total / PAGE_SIZE));
+}
+__name(pageCount, "pageCount");
+function normalizePage(page, count) {
+  if (count <= 0) return 0;
+  return (page % count + count) % count;
+}
+__name(normalizePage, "normalizePage");
+function pageOf(items, page) {
+  if (!items.length) return [];
+  const p = normalizePage(page, pageCount(items.length));
+  return items.slice(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE);
+}
+__name(pageOf, "pageOf");
+
 // src/wheel-app.ts
 var SVG_NS = "http://www.w3.org/2000/svg";
 var CX = 100;
@@ -252,13 +270,14 @@ var WheelApp = class extends AppV2 {
     const svg = document.createElementNS(SVG_NS, "svg");
     svg.setAttribute("viewBox", `0 0 ${VIEW} ${VIEW}`);
     svg.setAttribute("class", "pauih-svg");
-    const total = this.level.sectors.length;
+    const visible = this.#visibleSectors();
+    const total = visible.length;
     const ring = { cx: CX, cy: CY, R, W, total, gap: 0.02, arcSpan: ARC_SPAN };
-    this.level.sectors.forEach((sector, index) => {
+    visible.forEach(({ sector, index }, pos) => {
       const group = document.createElementNS(SVG_NS, "g");
       const group_cls = `pauih-sector-g state-${sector.state}`;
       group.setAttribute("class", group_cls);
-      const draw = sectorArc(ring, index);
+      const draw = sectorArc(ring, pos);
       const spin = document.createElementNS(SVG_NS, "g");
       spin.setAttribute("transform", `rotate(${draw.rotate} ${CX} ${CY})`);
       const arc = document.createElementNS(SVG_NS, "circle");
@@ -271,15 +290,15 @@ var WheelApp = class extends AppV2 {
       arc.dataset.index = String(index);
       spin.appendChild(arc);
       group.appendChild(spin);
-      if (index === 0 || index === total - 1) {
+      if (pos === 0 || pos === total - 1) {
         const cap = document.createElementNS(SVG_NS, "path");
-        cap.setAttribute("d", ringCapPath(ring, index === 0 ? "start" : "end", CAP_BULGE));
+        cap.setAttribute("d", ringCapPath(ring, pos === 0 ? "start" : "end", CAP_BULGE));
         cap.setAttribute("class", `pauih-sector-cap state-${sector.state}`);
         cap.dataset.index = String(index);
         group.appendChild(cap);
       }
       svg.appendChild(group);
-      const c = sectorCentroid(ring, index);
+      const c = sectorCentroid(ring, pos);
       if (sector.img) {
         const size = 18;
         const img = document.createElementNS(SVG_NS, "image");
@@ -332,8 +351,7 @@ var WheelApp = class extends AppV2 {
    * 没得翻时箭头置灰不可点，但格子照画，免得胶囊忽宽忽窄。
    */
   #paintCapsule(svg) {
-    const v = this.level.variant;
-    const canCycle = !!v && v.labels.length > 1;
+    const canCycle = this.#arrowMode() !== "none";
     const cells = [
       { action: "next", glyph: "\u203A", enabled: canCycle },
       { action: "back", glyph: "\u21A9", enabled: this.level.canGoBack },
@@ -417,7 +435,15 @@ var WheelApp = class extends AppV2 {
         y += lineHeight;
       }
     }
-    if (this.level.variant?.labels.length) {
+    const mode = this.#arrowMode();
+    if (mode === "page") {
+      const total = this.#pageCount();
+      line(
+        `${normalizePage(this.level.paging.page, total) + 1} / ${total}`,
+        CY + 16,
+        "pauih-variant"
+      );
+    } else if (this.level.variant?.labels.length) {
       const v = this.level.variant;
       line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
     }
@@ -457,6 +483,27 @@ var WheelApp = class extends AppV2 {
   currentVariantIndex() {
     return this.level.variant?.index ?? 0;
   }
+  /**
+   * 当前页要画的扇区，**带上它们在全量里的下标**。
+   * 没有分页状态时就是全部（下标即位置）。
+   */
+  #visibleSectors() {
+    const all = this.level.sectors.map((sector, index) => ({ sector, index }));
+    return this.level.paging ? pageOf(all, this.level.paging.page) : all;
+  }
+  /** 这一层总共几页；没有分页状态时恒为 1。 */
+  #pageCount() {
+    return this.level.paging ? pageCount(this.level.sectors.length) : 1;
+  }
+  /**
+   * 胶囊的 `‹ ›` 现在管什么。**分页优先于 MAP 翻选** ——
+   * 两者抢同一对箭头，一层不该同时开（见 types.ts 的 paging 注释）。
+   */
+  #arrowMode() {
+    if (this.level.paging && this.#pageCount() > 1) return "page";
+    if ((this.level.variant?.labels.length ?? 0) > 1) return "variant";
+    return "none";
+  }
   _replaceHTML(result, content) {
     content.replaceChildren(result);
     content.addEventListener("click", this.#onClick);
@@ -478,10 +525,17 @@ var WheelApp = class extends AppV2 {
     const el = ev.target;
     const nav = el?.dataset?.nav;
     if (nav) {
-      const v = this.level.variant;
-      if ((nav === "prev" || nav === "next") && v && v.labels.length) {
-        v.index = (v.index + (nav === "next" ? 1 : v.labels.length - 1)) % v.labels.length;
-        void this.render(false);
+      if (nav === "prev" || nav === "next") {
+        const delta = nav === "next" ? 1 : -1;
+        const mode = this.#arrowMode();
+        if (mode === "page" && this.level.paging) {
+          this.level.paging.page += delta;
+          void this.render(false);
+        } else if (mode === "variant" && this.level.variant) {
+          const v = this.level.variant;
+          v.index = (v.index + (delta === 1 ? 1 : v.labels.length - 1)) % v.labels.length;
+          void this.render(false);
+        }
       } else if (nav === "undo") {
         this.onUndo?.();
         void this.render(false);
@@ -600,6 +654,135 @@ function collectStrikes(actor) {
 }
 __name(collectStrikes, "collectStrikes");
 
+// src/usage.ts
+var MODULE_ID = "player-action-ui-hub";
+var SETTING = "actionUsage";
+var DECAY_AT = 200;
+function registerUsageSetting() {
+  game.settings.register(MODULE_ID, SETTING, {
+    name: "Action usage history",
+    hint: "Which actions you have used, and how often. Drives the ordering of the Actions wheel.",
+    scope: "client",
+    // 使用习惯是每个玩家各自的
+    config: false,
+    // 不在设置面板里露出，它不是给人手改的
+    type: Object,
+    default: {}
+  });
+}
+__name(registerUsageSetting, "registerUsageSetting");
+function usage() {
+  try {
+    return game.settings.get(MODULE_ID, SETTING) ?? {};
+  } catch {
+    return {};
+  }
+}
+__name(usage, "usage");
+function bump(slug) {
+  try {
+    const cur = usage();
+    const next = { ...cur, [slug]: (cur[slug] ?? 0) + 1 };
+    const total = Object.values(next).reduce((a, b) => a + b, 0);
+    if (total > DECAY_AT) {
+      for (const k of Object.keys(next)) {
+        const halved = Math.floor(next[k] / 2);
+        if (halved > 0) next[k] = halved;
+        else delete next[k];
+      }
+    }
+    void game.settings.set(MODULE_ID, SETTING, next);
+  } catch (err) {
+    console.error(`${MODULE_ID} | \u8BB0\u5F55\u52A8\u4F5C\u4F7F\u7528\u5931\u8D25`, err);
+  }
+}
+__name(bump, "bump");
+function countOf(map) {
+  return (slug) => map[slug] ?? 0;
+}
+__name(countOf, "countOf");
+
+// src/collectors/actions.ts
+function costToSectorCost(cost) {
+  if (cost === 1 || cost === "1") return "1";
+  if (cost === 2 || cost === "2") return "2";
+  if (cost === 3 || cost === "3") return "3";
+  if (cost === "reaction" || cost === "free") return cost;
+  return null;
+}
+__name(costToSectorCost, "costToSectorCost");
+function statisticList(statistic) {
+  if (!statistic) return [];
+  return Array.isArray(statistic) ? statistic : [statistic];
+}
+__name(statisticList, "statisticList");
+var COLD_START_ORDER = [
+  "stride",
+  "step",
+  "seek",
+  "take-cover",
+  "aid",
+  "demoralize",
+  "trip",
+  "grapple",
+  "shove",
+  "escape",
+  "hide",
+  "feint",
+  "tumble-through",
+  "ready",
+  "delay",
+  "stand",
+  "drop-prone",
+  "recall-knowledge",
+  "point-out",
+  "interact"
+];
+function tierOf(a, rankOf) {
+  if (a.traits.includes("exploration")) return 4;
+  if (a.section === "basic") return 0;
+  if (a.section === "specialty-basic") return 1;
+  const stats = statisticList(a.statistic).filter(Boolean);
+  if (stats.length === 0) return 1;
+  return Math.max(...stats.map(rankOf)) >= 1 ? 2 : 3;
+}
+__name(tierOf, "tierOf");
+function rankActions(list, rankOf, usedCount = () => 0) {
+  return list.filter((a) => !a.traits.includes("downtime")).map((a) => {
+    const used = usedCount(a.slug);
+    const cold = COLD_START_ORDER.indexOf(a.slug);
+    return {
+      a,
+      usedGroup: used > 0 ? 0 : 1,
+      used: -used,
+      cold: cold < 0 ? Number.MAX_SAFE_INTEGER : cold,
+      tier: tierOf(a, rankOf)
+    };
+  }).sort((x, y) => x.usedGroup - y.usedGroup || x.used - y.used || x.cold - y.cold || x.tier - y.tier || x.a.slug.localeCompare(y.a.slug)).map((x) => x.a);
+}
+__name(rankActions, "rankActions");
+function collectActions(actor) {
+  try {
+    const coll = game.pf2e?.actions;
+    if (!coll) return [];
+    const raw = [...coll.values()];
+    const rankOf = /* @__PURE__ */ __name((slug) => actor?.getStatistic?.(slug)?.rank ?? 0, "rankOf");
+    const used = countOf(usage());
+    return rankActions(raw, rankOf, used).map((a) => ({
+      id: `action:${a.slug}`,
+      // ⚠ 必须 localize，理由见 RawAction.name 的注释
+      label: game.i18n.localize(a.name),
+      img: a.img,
+      cost: costToSectorCost(a.cost),
+      state: "normal"
+    }));
+  } catch (err) {
+    console.error("player-action-ui-hub | collectActions \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(collectActions, "collectActions");
+
 // src/executor.ts
 function findStrike(actor, strikeId) {
   return strikesOf(actor).find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
@@ -646,9 +829,23 @@ async function execAuxiliary(actor, strikeId, auxIndex) {
   }
 }
 __name(execAuxiliary, "execAuxiliary");
+async function useAction(actor, slug, event) {
+  try {
+    const action = game.pf2e?.actions?.get(slug);
+    if (!action) {
+      ui.notifications.warn("That action is not available in this world.");
+      return;
+    }
+    await action.use({ actors: actor ? [actor] : [], event: intentEvent(event) });
+  } catch (err) {
+    console.error("player-action-ui-hub | useAction \u5931\u8D25", err);
+    ui.notifications.error("The action failed \u2014 see the console for details.");
+  }
+}
+__name(useAction, "useAction");
 
 // src/main.ts
-var MODULE_ID = "player-action-ui-hub";
+var MODULE_ID2 = "player-action-ui-hub";
 var lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 document.addEventListener("mousemove", (ev) => {
   lastMouse = { x: ev.clientX, y: ev.clientY };
@@ -703,6 +900,21 @@ function openAt(x, y) {
       void openWheel.setLevel(strikeLevel);
       return;
     }
+    if (s.id === "actions") {
+      const sectors = collectActions(actor);
+      if (!sectors.length) {
+        ui.notifications.info("No general actions are available.");
+        return;
+      }
+      openWheel.rebuild = void 0;
+      void openWheel.setLevel({
+        title: "Actions",
+        canGoBack: true,
+        paging: { page: 0 },
+        sectors
+      });
+      return;
+    }
     if (s.id === "__back") {
       openWheel.rebuild = void 0;
       void openWheel.setLevel(level);
@@ -717,6 +929,14 @@ function openAt(x, y) {
         if (round !== null) spend(actor.id, round, costToPoints(s.cost));
         void rollStrike(actor, s.id, map, ev).then(() => openWheel?.close());
       }
+      return;
+    }
+    if (s.id.startsWith("action:")) {
+      const slug = s.id.slice("action:".length);
+      bump(slug);
+      const round = currentRound(actor);
+      if (round !== null) spend(actor.id, round, costToPoints(s.cost));
+      void useAction(actor, slug, ev).then(() => openWheel?.close());
       return;
     }
     ui.notifications.info(`"${s.label}" is not implemented yet.`);
@@ -734,8 +954,9 @@ function openAt(x, y) {
 }
 __name(openAt, "openAt");
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | init`);
-  game.keybindings.register(MODULE_ID, "openWheel", {
+  console.log(`${MODULE_ID2} | init`);
+  registerUsageSetting();
+  game.keybindings.register(MODULE_ID2, "openWheel", {
     name: "Summon Action Wheel",
     hint: "Opens the wheel at the cursor. Equivalent to Ctrl+left-click; rebind this if Ctrl+click is awkward on your setup.",
     // modifiers 显式给空数组：省略它在运行时等价
@@ -751,9 +972,9 @@ Hooks.once("init", () => {
   });
 });
 Hooks.once("ready", () => {
-  const mod = game.modules.get(MODULE_ID);
+  const mod = game.modules.get(MODULE_ID2);
   console.log(
-    `%c${MODULE_ID} | ready | v${mod?.version ?? "?"}`,
+    `%c${MODULE_ID2} | ready | v${mod?.version ?? "?"}`,
     "color:#c9a959;font-weight:bold"
   );
   const demoLevel = {
