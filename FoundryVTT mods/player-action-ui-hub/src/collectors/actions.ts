@@ -1,6 +1,6 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import type { SectorData } from "../types";
-import { usage, countOf } from "../usage";
+import { usage, promotedRank } from "../usage";
 
 /**
  * `game.pf2e.actions` 里一条动作的形状。
@@ -104,39 +104,43 @@ function tierOf(a: RawAction, rankOf: (slug: string) => number): number {
  * 过滤 + 排序。
  *
  * 排序优先级（从强到弱）：
- *   1. **用过的 > 没用过的**，且用得多的更前 —— 「我用过它」是比
- *      「它是 basic 动作」**更强的现实信号**，所以它跨档生效；
+ *   1. **常用区**（已升上来的）按它升上来的先后 —— 见下面那条铁律；
  *   2. 冷启动清单里的次序；
  *   3. `tierOf` 的分档；
  *   4. slug 字母序兜底 —— 否则同档内顺序随集合迭代而变，
  *      玩家每次打开看到的位置都不一样。
  *
- * @param rankOf    技能 slug → 熟练度等级（0 = 未训练）。实测字段是 `statistic.rank`。
- * @param usedCount 动作 slug → 玩家用过几次。默认全 0 = 纯冷启动。
+ * ★★ **位置只增不改**（Nous 2026-08-05 指出后重做）。
+ *   前一版是"用过的立刻跨档顶到最前、按次数排"，那会让**每点一次动作、
+ *   下次打开顺序就变**。径向菜单相对列表的唯一结构性优势就是空间记忆，
+ *   位置一漂移这个优势就没了，而且它**不报错**：盘面看着正常，
+ *   玩家甩向老位置点到的却是别的动作。
+ *   所以排序依据是 `promotedRank`（升入先后，末尾追加、永不换位），
+ *   **不是使用次数**。次数只用来判断够不够升。
+ *
+ * @param rankOf   技能 slug → 熟练度等级（0 = 未训练）。实测字段是 `statistic.rank`。
+ * @param frontOf  动作 slug → 它在常用区排第几（不在则 `Infinity`）。默认全不在。
  */
 export function rankActions(
     list: RawAction[],
     rankOf: (slug: string) => number,
-    usedCount: (slug: string) => number = () => 0,
+    frontOf: (slug: string) => number = () => Number.POSITIVE_INFINITY,
 ): RawAction[] {
     return list
-        // ⚠ downtime 是唯一被删的，**用过也不收**：它按规则就不是遭遇战动作
+        // ⚠ downtime 是唯一被删的，**升上来了也不收**：它按规则就不是遭遇战动作
         //   （实测 70 条里 3 条：create-forgery / subsist / treat-disease）
         .filter(a => !a.traits.includes("downtime"))
         .map(a => {
-            const used = usedCount(a.slug);
             const cold = COLD_START_ORDER.indexOf(a.slug);
             return {
                 a,
-                usedGroup: used > 0 ? 0 : 1,
-                used: -used,
+                front: frontOf(a.slug),
                 cold: cold < 0 ? Number.MAX_SAFE_INTEGER : cold,
                 tier: tierOf(a, rankOf),
             };
         })
         .sort((x, y) =>
-            x.usedGroup - y.usedGroup
-            || x.used - y.used
+            x.front - y.front
             || x.cold - y.cold
             || x.tier - y.tier
             || x.a.slug.localeCompare(y.a.slug))
@@ -158,10 +162,10 @@ export function collectActions(actor: ActorPF2e | null): SectorData[] {
         const raw: RawAction[] = [...coll.values()];
         const rankOf = (slug: string): number =>
             (actor?.getStatistic?.(slug) as { rank?: number } | null)?.rank ?? 0;
-        // 玩家自己的使用记录 —— 排序的真实依据，压过冷启动清单与分档
-        const used = countOf(usage());
+        // 玩家自己的常用区 —— 压过冷启动清单与分档，但**位置只增不改**
+        const front = promotedRank(usage());
 
-        return rankActions(raw, rankOf, used).map((a): SectorData => ({
+        return rankActions(raw, rankOf, front).map((a): SectorData => ({
             id: `action:${a.slug}`,
             // ⚠ 必须 localize，理由见 RawAction.name 的注释
             label: game.i18n.localize(a.name),

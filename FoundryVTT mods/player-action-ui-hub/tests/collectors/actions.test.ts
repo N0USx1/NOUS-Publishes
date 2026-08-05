@@ -138,48 +138,54 @@ describe("rankActions 排序", () => {
 });
 
 /*
- * ★★ 使用历史（Nous 2026-08-05 拍板："两者合起来"）。
+ * ★★ 常用区（Nous 2026-08-05 拍板"两者合起来"，随后又指出重排会毁掉体验）。
  *
  * "哪个动作更常用"**不在游戏数据里** —— 和"是否必须训练"是同一类问题。
- * 所以：冷启动用一份人为的高频清单，之后由**玩家自己的真实使用记录**逐步接管。
- * 「我用过它」是比「它是 basic 动作」更强的现实信号，因此**用过的跨档优先**。
+ * 所以冷启动用人为清单，之后由玩家真实使用记录接管。
+ *
+ * ⚠ **但接管的方式是"位置只增不改"，不是"跟着次数重排"**：
+ *   径向菜单的唯一结构性优势是空间记忆，位置漂移会毁掉它，而且**不报错**。
  */
-describe("使用历史优先于一切分档", () => {
+describe("常用区优先于一切分档", () => {
     const rankOf = () => 0;
-    const slugs = (list: RawAction[], used: Record<string, number> = {}) =>
-        rankActions(list, rankOf, (s) => used[s] ?? 0).map(a => a.slug);
+    // 模拟 promotedRank：给定"常用区顺序"，返回下标查询函数
+    const front = (order: string[]) => (s: string) => {
+        const i = order.indexOf(s);
+        return i < 0 ? Number.POSITIVE_INFINITY : i;
+    };
+    const slugs = (list: RawAction[], order: string[] = []) =>
+        rankActions(list, rankOf, front(order)).map(a => a.slug);
 
-    it("★ 用过的排在没用过的前面，哪怕它档位更低", () => {
-        // trip 是未训练的技能动作（最低档），却用过 3 次
+    it("★ 常用区的排在其余之前，哪怕它档位更低", () => {
         expect(slugs(
             [raw({ slug: "aaa-basic", section: "basic" }), raw({ slug: "trip", section: "skill", statistic: "athletics" })],
-            { trip: 3 },
+            ["trip"],
         )).toEqual(["trip", "aaa-basic"]);
     });
 
-    it("用得多的排在用得少的前面", () => {
+    it("常用区内部按**升入先后**排，不按别的", () => {
         expect(slugs(
             [raw({ slug: "aaa", section: "skill" }), raw({ slug: "zzz", section: "skill" })],
-            { aaa: 1, zzz: 5 },
+            ["zzz", "aaa"],
         )).toEqual(["zzz", "aaa"]);
     });
 
-    it("★ exploration 用过也能上来 —— 玩家真在用的东西不该被我们的分类压住", () => {
+    it("★ exploration 升上来也能排前面 —— 玩家真在用的不该被我们的分类压住", () => {
         expect(slugs(
             [raw({ slug: "aaa-basic", section: "basic" }),
              raw({ slug: "avoid-notice", traits: ["exploration"], statistic: "stealth" })],
-            { "avoid-notice": 2 },
+            ["avoid-notice"],
         )).toEqual(["avoid-notice", "aaa-basic"]);
     });
 
-    it("⚠ 但 downtime 用过也不收 —— 它按规则就不是遭遇战动作", () => {
+    it("⚠ 但 downtime 升上来也不收 —— 它按规则就不是遭遇战动作", () => {
         expect(slugs(
             [raw({ slug: "treat-disease", traits: ["downtime"] }), raw({ slug: "hide", section: "skill" })],
-            { "treat-disease": 9 },
+            ["treat-disease"],
         )).toEqual(["hide"]);
     });
 
-    it("都没用过时退回冷启动顺序，不受历史影响", () => {
+    it("常用区为空时退回冷启动顺序", () => {
         expect(slugs([
             raw({ slug: "zzz-skill", section: "skill", statistic: "athletics" }),
             raw({ slug: "aaa-basic", section: "basic" }),
@@ -187,9 +193,49 @@ describe("使用历史优先于一切分档", () => {
     });
 });
 
+/*
+ * ★★★ 位置稳定性 —— 本模组最容易被"顺手优化"掉的一条铁律。
+ *
+ * 谁要是把常用区改成"按使用次数排"，下面这组会立刻红。
+ * 那么做的后果不是排序不好看，是**玩家甩向记住的位置、点到别的动作**，
+ * 而在 PF2e 里那等于浪费一个动作或掷出一个收不回的骰子。
+ */
+describe("★ 位置只增不改（防止肌肉记忆失效）", () => {
+    const rankOf = () => 0;
+    const front = (order: string[]) => (s: string) => {
+        const i = order.indexOf(s);
+        return i < 0 ? Number.POSITIVE_INFINITY : i;
+    };
+    const list = ["aaa", "bbb", "ccc", "ddd"].map(slug => raw({ slug, section: "skill" }));
+    const at = (order: string[], slug: string) =>
+        rankActions(list, rankOf, front(order)).findIndex(a => a.slug === slug);
+
+    it("新动作升进常用区，**不会挤动已有条目的位置**", () => {
+        const before = ["ccc", "aaa"];
+        const after = ["ccc", "aaa", "ddd"];        // ddd 追加到末尾
+        expect(at(before, "ccc")).toBe(at(after, "ccc"));
+        expect(at(before, "aaa")).toBe(at(after, "aaa"));
+        expect(at(after, "ddd")).toBe(2);
+    });
+
+    it("常用区顺序一经确定就不随后续排序调用改变（同输入同输出）", () => {
+        const order = ["ddd", "bbb"];
+        const once = rankActions(list, rankOf, front(order)).map(a => a.slug);
+        const twice = rankActions(list, rankOf, front(order)).map(a => a.slug);
+        expect(once).toEqual(twice);
+    });
+
+    it("★ 首位一旦被某个动作占住，新升上来的不许抢它", () => {
+        expect(at(["bbb"], "bbb")).toBe(0);
+        expect(at(["bbb", "ddd"], "bbb")).toBe(0);   // ddd 后来居上也抢不到
+        expect(at(["bbb", "ddd", "aaa"], "bbb")).toBe(0);
+    });
+});
+
 describe("冷启动高频清单", () => {
     const rankOf = () => 0;
-    const slugs = (list: RawAction[]) => rankActions(list, rankOf, () => 0).map(a => a.slug);
+    const slugs = (list: RawAction[]) =>
+        rankActions(list, rankOf, () => Number.POSITIVE_INFINITY).map(a => a.slug);
 
     it("★ 清单里的动作排在所有分档之前（第一次用就好用）", () => {
         // stride 是 basic，trip 是未训练技能 —— 但两个都在清单里，且 stride 更靠前
@@ -214,11 +260,11 @@ describe("冷启动高频清单", () => {
         ])).toEqual(["stride", "demoralize"]);
     });
 
-    it("⚠ 清单只是冷启动：用过的仍然压过它", () => {
+    it("⚠ 清单只是冷启动：升进常用区的仍然压过它", () => {
         const out = rankActions(
             [raw({ slug: "stride", section: "basic" }), raw({ slug: "climb", section: "skill", statistic: "athletics" })],
             rankOf,
-            (s) => (s === "climb" ? 4 : 0),
+            (s) => (s === "climb" ? 0 : Number.POSITIVE_INFINITY),
         ).map(a => a.slug);
         expect(out).toEqual(["climb", "stride"]);
     });

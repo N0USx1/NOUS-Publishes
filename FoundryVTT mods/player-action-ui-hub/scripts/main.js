@@ -657,50 +657,52 @@ __name(collectStrikes, "collectStrikes");
 // src/usage.ts
 var MODULE_ID = "player-action-ui-hub";
 var SETTING = "actionUsage";
-var DECAY_AT = 200;
+var PROMOTE_AT = 5;
+var EMPTY = { counts: {}, promoted: [] };
 function registerUsageSetting() {
   game.settings.register(MODULE_ID, SETTING, {
     name: "Action usage history",
-    hint: "Which actions you have used, and how often. Drives the ordering of the Actions wheel.",
+    hint: "Which actions you have used. Actions you use often move into the front of the Actions wheel and then stay put.",
     scope: "client",
     // 使用习惯是每个玩家各自的
     config: false,
     // 不在设置面板里露出，它不是给人手改的
     type: Object,
-    default: {}
+    default: EMPTY
   });
 }
 __name(registerUsageSetting, "registerUsageSetting");
 function usage() {
   try {
-    return game.settings.get(MODULE_ID, SETTING) ?? {};
+    const raw = game.settings.get(MODULE_ID, SETTING);
+    return {
+      counts: raw?.counts ?? {},
+      promoted: Array.isArray(raw?.promoted) ? raw.promoted : []
+    };
   } catch {
-    return {};
+    return EMPTY;
   }
 }
 __name(usage, "usage");
+function withUse(rec, slug) {
+  const counts = { ...rec.counts, [slug]: (rec.counts[slug] ?? 0) + 1 };
+  const promoted = rec.promoted.includes(slug) || counts[slug] < PROMOTE_AT ? rec.promoted : [...rec.promoted, slug];
+  return { counts, promoted };
+}
+__name(withUse, "withUse");
 function bump(slug) {
   try {
-    const cur = usage();
-    const next = { ...cur, [slug]: (cur[slug] ?? 0) + 1 };
-    const total = Object.values(next).reduce((a, b) => a + b, 0);
-    if (total > DECAY_AT) {
-      for (const k of Object.keys(next)) {
-        const halved = Math.floor(next[k] / 2);
-        if (halved > 0) next[k] = halved;
-        else delete next[k];
-      }
-    }
-    void game.settings.set(MODULE_ID, SETTING, next);
+    void game.settings.set(MODULE_ID, SETTING, withUse(usage(), slug));
   } catch (err) {
     console.error(`${MODULE_ID} | \u8BB0\u5F55\u52A8\u4F5C\u4F7F\u7528\u5931\u8D25`, err);
   }
 }
 __name(bump, "bump");
-function countOf(map) {
-  return (slug) => map[slug] ?? 0;
+function promotedRank(rec) {
+  const order = new Map(rec.promoted.map((s, i) => [s, i]));
+  return (slug) => order.get(slug) ?? Number.POSITIVE_INFINITY;
 }
-__name(countOf, "countOf");
+__name(promotedRank, "promotedRank");
 
 // src/collectors/actions.ts
 function costToSectorCost(cost) {
@@ -747,18 +749,16 @@ function tierOf(a, rankOf) {
   return Math.max(...stats.map(rankOf)) >= 1 ? 2 : 3;
 }
 __name(tierOf, "tierOf");
-function rankActions(list, rankOf, usedCount = () => 0) {
+function rankActions(list, rankOf, frontOf = () => Number.POSITIVE_INFINITY) {
   return list.filter((a) => !a.traits.includes("downtime")).map((a) => {
-    const used = usedCount(a.slug);
     const cold = COLD_START_ORDER.indexOf(a.slug);
     return {
       a,
-      usedGroup: used > 0 ? 0 : 1,
-      used: -used,
+      front: frontOf(a.slug),
       cold: cold < 0 ? Number.MAX_SAFE_INTEGER : cold,
       tier: tierOf(a, rankOf)
     };
-  }).sort((x, y) => x.usedGroup - y.usedGroup || x.used - y.used || x.cold - y.cold || x.tier - y.tier || x.a.slug.localeCompare(y.a.slug)).map((x) => x.a);
+  }).sort((x, y) => x.front - y.front || x.cold - y.cold || x.tier - y.tier || x.a.slug.localeCompare(y.a.slug)).map((x) => x.a);
 }
 __name(rankActions, "rankActions");
 function collectActions(actor) {
@@ -767,8 +767,8 @@ function collectActions(actor) {
     if (!coll) return [];
     const raw = [...coll.values()];
     const rankOf = /* @__PURE__ */ __name((slug) => actor?.getStatistic?.(slug)?.rank ?? 0, "rankOf");
-    const used = countOf(usage());
-    return rankActions(raw, rankOf, used).map((a) => ({
+    const front = promotedRank(usage());
+    return rankActions(raw, rankOf, front).map((a) => ({
       id: `action:${a.slug}`,
       // ⚠ 必须 localize，理由见 RawAction.name 的注释
       label: game.i18n.localize(a.name),
