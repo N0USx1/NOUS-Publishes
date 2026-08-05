@@ -357,4 +357,79 @@ check("第二步照样列全部徒手", 连击.第二步?.条数, 连击.第一�
 check("两步走完就该执行了", 连击.第三步是null, true);
 check("测试没在世界里留垃圾", 连击.删干净了, true);
 
+/* ── 11. 甲类状态区 ──────────────────────────────
+ *
+ * ★ 这一组要证的是**旧做法为什么错**，不只是新做法能跑：
+ *   旧做法按 classSlug 过滤开关，而典范的神火挂在圣像特性上、那些特性的 traits
+ *   是 `["ikon"]` 不含 `exemplar` —— 这是个关于**pf2e 的数据**的判断，
+ *   哪天它变了我们的改动就没道理了，所以钉的是依据本身。
+ */
+section("甲类状态区");
+const 状态 = await evaluate(`
+${PRELUDE}
+const out = {};
+// ① 真角色：现在显示得出东西吗
+const 真 = game.actors.getName("Nous offnirr") ?? game.actors.filter(a => a.type === "character")[0];
+const s0 = pauih._test.readClassState(真);
+out.真角色 = { 资源: s0.resources.map(r => r.label + " " + r.value),
+              开关: s0.toggles.map(t => t.label + " " + t.value),
+              行: pauih._test.classStateLines(s0) };
+
+// ② 圣像特性到底带不带 exemplar trait —— 推翻旧做法的那条依据
+/*
+ * ⚠ 用两个已知的圣像当样本，**不扫全包** —— 逐条 getDocument 走 1000+ 条要跑几分钟。
+ *   名字改了这条会红，那正是我们想知道的（断言的是它们的 rules 与 traits，不是名字本身）。
+ */
+const pack = game.packs.get("pf2e.classfeatures");
+const idx = await pack.getIndex();
+const 圣像 = [];
+for (const 名 of ["Thousand-League Sandals", "Scar of the Survivor"]) {
+  const hit = idx.find(e => e.name === 名);
+  if (!hit) { 圣像.push({ 名, 找不到: true }); continue; }
+  const d = await pack.getDocument(hit._id);
+  圣像.push({
+    名: d.name, id: d._id, traits: d.system?.traits?.value ?? [],
+    声明神火: (d.system?.rules ?? []).some(r => r.key === "RollOption" && r.option === "divine-spark"),
+  });
+}
+out.圣像样本 = 圣像;
+out.圣像带exemplar = 圣像.some(i => i.traits.includes("exemplar"));
+
+// ③ 造个典范，装两个圣像，看神火那条出不出来
+let 典范 = null;
+try {
+  典范 = await Actor.create({ name: "PAUIH temp exemplar", type: "character" });
+  for (const i of 圣像) {
+    const d = await pack.getDocument(i.id);
+    await 典范.createEmbeddedDocuments("Item", [d.toObject()]);
+  }
+  const st = pauih._test.readClassState(典范);
+  const 神火 = st.toggles.find(t => t.key === "toggle:divine-spark");
+  out.神火 = 神火 ?? null;
+  out.开关条数 = st.toggles.length;
+  // 旧做法模拟：按 classSlug 过滤会剩几条
+  const cls = 典范.class?.slug ?? null;
+  let 旧法剩 = 0;
+  for (const opts of Object.values(典范.synthetics?.toggles ?? {})) {
+    for (const o of Object.values(opts)) {
+      const it = o.itemId ? 典范.items.get(o.itemId) : null;
+      if (cls && (it?.system?.traits?.value ?? []).includes(cls)) 旧法剩++;
+    }
+  }
+  out.旧做法剩几条 = 旧法剩;
+} finally {
+  if (典范) await 典范.delete();
+}
+out.删干净了 = !game.actors.getName("PAUIH temp exemplar");
+return out;
+`);
+check("真角色的状态区有内容", 状态.真角色?.行, v => Array.isArray(v) && v.length > 0, "至少一行");
+check("两个圣像样本都在，且都声明 divine-spark", 状态.圣像样本,
+      v => Array.isArray(v) && v.length === 2 && v.every(x => x.声明神火), "两条都声明");
+check("★ 圣像特性确实不带 exemplar trait（旧做法必然漏掉的依据）", 状态.圣像带exemplar, false);
+check("★ 装上圣像后神火那条出得来", 状态.神火, v => !!v && String(v.key) === "toggle:divine-spark");
+check("★ 多个圣像声明同一个开关 → 归成一条", 状态.开关条数, 1);
+check("★ 对照：旧的按职业过滤一条都留不下", 状态.旧做法剩几条, 0);
+check("测试没在世界里留垃圾", 状态.删干净了, true);
+
 process.exit(report());

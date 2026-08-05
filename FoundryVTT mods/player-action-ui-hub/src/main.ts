@@ -471,7 +471,8 @@ Hooks.once("ready", () => {
          *   另写一份就是又造一个会腐坏的副本，测的还是副本不是产品。
          */
         _test: { auraPlanFor, buildAuraEffect, savePlanFor, sceneHasGrid, resolveAreaAfterCast,
-                 macroFor, levelForStep, unarmedStrikes },
+                 macroFor, levelForStep, unarmedStrikes,
+                 readClassState, classStateLines },
     };
 
     // —— 画布上 Ctrl+左键呼出，整串事件全吞 ——

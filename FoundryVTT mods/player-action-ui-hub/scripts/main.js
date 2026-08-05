@@ -1627,42 +1627,74 @@ __name(collectSpells, "collectSpells");
 init_executor();
 
 // src/class-state.ts
-var MAX_STATE_LINES = 2;
-function classStateLines(input) {
-  const lines = [];
-  if (input.focus && input.focus.max > 0) {
-    lines.push(`\u2726 Focus ${input.focus.value}/${input.focus.max}`);
-  }
-  for (const t of input.toggles) {
-    lines.push(`${t.label} \u2726 ${t.enabled ? "on" : "off"}`);
-  }
-  return lines.slice(0, MAX_STATE_LINES);
+var MAX_STATE_LINES = 3;
+var COMMON_RESOURCES = [
+  { path: "focus", key: "focus", label: "Focus" },
+  { path: "heroPoints", key: "hero", label: "Hero Points" },
+  { path: "mythicPoints", key: "mythic", label: "Mythic" }
+];
+var CLASS_RESOURCES = {
+  // 实测路径：`actor.system.resources.crafting.infusedReagents`
+  alchemist: [{ path: "crafting.infusedReagents", key: "reagents", label: "Reagents" }]
+};
+function \u8BFB\u8D44\u6E90(a, path) {
+  const v = path.split(".").reduce((o, k) => o?.[k], a?.system?.resources);
+  if (!v || typeof v.max !== "number" || v.max <= 0) return null;
+  return { value: Number(v.value ?? 0), max: Number(v.max) };
 }
-__name(classStateLines, "classStateLines");
+__name(\u8BFB\u8D44\u6E90, "\u8BFB\u8D44\u6E90");
+function collectToggles(actor) {
+  const a = actor;
+  const \u5F52\u7EC4 = /* @__PURE__ */ new Map();
+  for (const opts of Object.values(a?.synthetics?.toggles ?? {})) {
+    for (const opt of Object.values(opts)) {
+      const option = String(opt?.option ?? "");
+      if (!option || \u5F52\u7EC4.has(option)) continue;
+      const label = String(opt?.label ?? option);
+      const \u9009\u4E2D = opt?.selection != null ? (opt.suboptions ?? []).find((s) => s?.value === opt.selection) : null;
+      const value = \u9009\u4E2D ? String(\u9009\u4E2D.label ?? \u9009\u4E2D.value) : opt?.enabled ? "on" : "off";
+      \u5F52\u7EC4.set(option, { key: `toggle:${option}`, label, value });
+    }
+  }
+  return [...\u5F52\u7EC4.values()];
+}
+__name(collectToggles, "collectToggles");
+function collectEffects(actor) {
+  const a = actor;
+  const out = [];
+  for (const e of a?.itemTypes?.effect ?? []) {
+    const badge = e?.system?.badge;
+    const \u8BA1\u6570 = badge && typeof badge.value === "number" ? String(badge.value) : null;
+    const label = String(e?.name ?? "").replace(/^\s*Effect:\s*/i, "");
+    out.push({ key: `effect:${e?.slug ?? label}`, label, value: \u8BA1\u6570 ?? "active" });
+  }
+  return out;
+}
+__name(collectEffects, "collectEffects");
 function readClassState(actor) {
   try {
     const a = actor;
     const classSlug = a?.class?.slug ?? null;
-    const focus = a?.system?.resources?.focus ?? null;
-    const toggles = [];
-    for (const [, options] of Object.entries(a?.synthetics?.toggles ?? {})) {
-      for (const [, opt] of Object.entries(options)) {
-        const item = opt?.itemId ? a?.items?.get?.(opt.itemId) : null;
-        const traits = item?.system?.traits?.value ?? [];
-        if (!classSlug || !traits.includes(classSlug)) continue;
-        toggles.push({
-          label: String(opt?.label ?? opt?.option ?? "?"),
-          enabled: !!opt?.enabled
-        });
-      }
+    const \u8868 = [...COMMON_RESOURCES, ...classSlug ? CLASS_RESOURCES[classSlug] ?? [] : []];
+    const resources = [];
+    for (const r of \u8868) {
+      const v = \u8BFB\u8D44\u6E90(a, r.path);
+      if (v) resources.push({ key: r.key, label: r.label, value: `${v.value}/${v.max}` });
     }
-    return { focus: focus && focus.max > 0 ? { value: focus.value, max: focus.max } : null, toggles };
+    return { resources, toggles: collectToggles(actor), effects: collectEffects(actor) };
   } catch (err) {
     console.error("player-action-ui-hub | readClassState \u5931\u8D25", err);
-    return { focus: null, toggles: [] };
+    return { resources: [], toggles: [], effects: [] };
   }
 }
 __name(readClassState, "readClassState");
+function classStateLines(input) {
+  const \u6709\u9009\u62E9 = input.toggles.filter((t) => t.value !== "on" && t.value !== "off");
+  const \u7EAF\u5F00\u5173 = input.toggles.filter((t) => t.value === "on" || t.value === "off");
+  const \u6392\u597D = [...input.resources, ...\u6709\u9009\u62E9, ...input.effects, ...\u7EAF\u5F00\u5173];
+  return \u6392\u597D.slice(0, MAX_STATE_LINES).map((l) => `${l.label} \u2726 ${l.value}`);
+}
+__name(classStateLines, "classStateLines");
 
 // src/main.ts
 init_aura_effects();
@@ -2103,7 +2135,9 @@ Hooks.once("ready", () => {
       resolveAreaAfterCast,
       macroFor,
       levelForStep,
-      unarmedStrikes
+      unarmedStrikes,
+      readClassState,
+      classStateLines
     }
   };
   function isWheelSummon(ev) {
