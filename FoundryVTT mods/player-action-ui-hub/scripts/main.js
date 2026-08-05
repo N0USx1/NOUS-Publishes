@@ -189,13 +189,18 @@ var R_OUTER = R + W;
 var VIEW = 2 * R_OUTER;
 var AppV2 = foundry.applications.api.ApplicationV2;
 var HUB_CHARS_PER_LINE = 16;
-var CAP_H = 23;
+var HUB_TITLE_CENTER = CY - 4;
+var HUB_VARIANT_Y = CY + 19;
+var HUB_STATE_Y = CY + 28;
+var HUB_ECONOMY_Y = CY + 38;
+var SECTOR_GAP = 0.02;
+var CAP_H = 2 * W;
 var W_CAP = CAP_H / 2;
 var CAP_SEAM = 1.6;
 var CAP_INK = 56 * Math.PI / 180;
-var CAP_CLEAR = 4 * Math.PI / 180;
 var CAP_BULGE = 1;
-var GAP_ANGLE = CAP_INK + 2 * CAP_CLEAR + 2 * capOvershoot(R, W, CAP_BULGE);
+var CAP_GAP_HALF = CAP_SEAM / R / 2;
+var GAP_ANGLE = 2 * (CAP_INK / 2 - CAP_GAP_HALF + SECTOR_GAP + capOvershoot(R, W, CAP_BULGE) - SECTOR_GAP / 2);
 var ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
 var IDLE_DISMISS_MS = 5e3;
 function clamp(v, lo, hi) {
@@ -291,7 +296,7 @@ var WheelApp = class extends AppV2 {
     svg.setAttribute("class", "pauih-svg");
     const visible = this.#visibleSectors();
     const total = visible.length;
-    const ring = { cx: CX, cy: CY, R, W, total, gap: 0.02, arcSpan: ARC_SPAN };
+    const ring = { cx: CX, cy: CY, R, W, total, gap: SECTOR_GAP, arcSpan: ARC_SPAN };
     visible.forEach(({ sector, index }, pos) => {
       const group = document.createElementNS(SVG_NS, "g");
       const group_cls = `pauih-sector-g state-${sector.state}`;
@@ -439,16 +444,22 @@ var WheelApp = class extends AppV2 {
       t.textContent = text;
       g.appendChild(t);
     }, "line");
-    const center = CY;
+    const center = HUB_TITLE_CENTER;
     if (!sector) {
       line(this.level.title, center, "pauih-hub-title");
     } else {
+      const detailLines = sector.detail ? [sector.detail] : [];
       const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
       const lineHeight = 7;
-      const blockHeight = reasonLines.length ? reasonLines.length * lineHeight + 5 : 0;
+      const extra = detailLines.length + reasonLines.length;
+      const blockHeight = extra ? extra * lineHeight + 5 : 0;
       let y = center - blockHeight / 2;
       line(sector.label, y, "pauih-hub-title");
       y += 9;
+      for (const d of detailLines) {
+        line(d, y, "pauih-hub-detail");
+        y += lineHeight;
+      }
       for (const l of reasonLines) {
         line(l, y, `pauih-hub-reason state-${sector.state}`);
         y += lineHeight;
@@ -459,27 +470,16 @@ var WheelApp = class extends AppV2 {
       const total = this.#pageCount();
       line(
         `${normalizePage(this.level.paging.page, total) + 1} / ${total}`,
-        CY + 16,
+        HUB_VARIANT_Y,
         "pauih-variant"
       );
     } else if (this.level.variant?.labels.length) {
       const v = this.level.variant;
-      line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
+      line(v.labels[v.index] ?? "", HUB_VARIANT_Y, "pauih-variant");
     }
     const state = this.classState?.() ?? [];
-    state.forEach((line2, i) => {
-      line_(line2, CY + 20 + (i - state.length) * 6.5);
-    });
+    if (state.length) line(state.join(" \xB7 "), HUB_STATE_Y, "pauih-class-state");
     this.#paintEconomy(g);
-    function line_(text, y) {
-      const t = document.createElementNS(SVG_NS, "text");
-      t.setAttribute("x", String(CX));
-      t.setAttribute("y", String(y));
-      t.setAttribute("class", "pauih-class-state");
-      t.textContent = text;
-      g.appendChild(t);
-    }
-    __name(line_, "line_");
   }
   /**
    * 毂底的动作经济行：三个菱形 + 一个红色 « 撤回（Nous 2026-08-05 定的形态）。
@@ -491,7 +491,7 @@ var WheelApp = class extends AppV2 {
   #paintEconomy(g) {
     const econ = this.economy?.();
     if (!econ) return;
-    const y = CY + 27;
+    const y = HUB_ECONOMY_Y;
     const pipDx = 8;
     const pips = glyphs(econ.remaining);
     const hasReaction = econ.reactionsLeft !== void 0;
@@ -758,10 +758,17 @@ function rankSkills(list) {
   return [...list].sort((x, y) => (y.rank > 0 ? 1 : 0) - (x.rank > 0 ? 1 : 0) || y.rank - x.rank || x.label.localeCompare(y.label));
 }
 __name(rankSkills, "rankSkills");
-function rankAbbr(rank) {
-  return ["U", "T", "E", "M", "L"][rank] ?? "U";
+function rankName(rank) {
+  return ["Untrained", "Trained", "Expert", "Master", "Legendary"][rank] ?? "Untrained";
 }
-__name(rankAbbr, "rankAbbr");
+__name(rankName, "rankName");
+var ICON_FALLBACK = {
+  "recall-knowledge": "icons/skills/trades/academics-book-study-runes.webp",
+  "identify-magic": "icons/magic/symbols/question-stone-yellow.webp",
+  "identify-alchemy": "icons/skills/trades/academics-investigation-puzzles.webp",
+  "learn-a-spell": "icons/skills/trades/academics-study-reading-book.webp"
+};
+var CHECK_ICON = "icons/skills/trades/academics-scribe-quill-gray.webp";
 function collectSkills(actor) {
   try {
     const a = actor;
@@ -787,8 +794,9 @@ function collectSkills(actor) {
       label: s.label,
       cost: null,
       state: "normal",
-      // 修正值与熟练度：玩家最想先看到的就是这两个数
-      badge: `${s.mod >= 0 ? "+" : ""}${s.mod} ${rankAbbr(s.rank)}`
+      // ★ 修正值走 detail（悬停时在毂里显示），**不印在扇区上** ——
+      //   扇区底下挂一行小字既挤又难认（Nous 2026-08-05 指出）。
+      detail: `${s.mod >= 0 ? "+" : ""}${s.mod} \xB7 ${rankName(s.rank)}`
     }));
   } catch (err) {
     console.error("player-action-ui-hub | collectSkills \u5931\u8D25", err);
@@ -804,10 +812,13 @@ function collectSkillActions(actor, skillSlug) {
     if (stat) {
       out.push({
         id: `skillcheck:${skillSlug}`,
-        label: `${stat.label} Check`,
+        // ⚠ 只叫 "Check" 而不是 "<技能> Check"：**层标题已经是技能名了**，
+        //   重复一遍既冗余又长到压出扇区（`Occultism Check` 实测溢出）。
+        label: "Check",
+        img: CHECK_ICON,
         cost: null,
         state: "normal",
-        badge: `${stat.mod >= 0 ? "+" : ""}${stat.mod}`
+        detail: `${stat.label} ${stat.mod >= 0 ? "+" : ""}${stat.mod}`
       });
     }
     const coll = game.pf2e?.actions;
@@ -817,7 +828,8 @@ function collectSkillActions(actor, skillSlug) {
       out.push({
         id: `action:${act.slug}`,
         label: game.i18n.localize(act.name),
-        img: act.img,
+        // pf2e 没给图标的那几个用本地库补上，否则长名字会压出扇区
+        img: act.img ?? ICON_FALLBACK[act.slug],
         cost: costToSectorCost(act.cost),
         state: "normal"
       });

@@ -146,6 +146,10 @@
     text-anchor: middle;
     pointer-events: none;
     user-select: none;
+    /* ⚠ **默认色不能省**：只给 risky/gated 定义 fill 的话，normal 态的角标
+       会退回 SVG 默认的黑色，在深色盘面上等于隐形（Nous 2026-08-05 截图指出，
+       技能的 "+11 T" 完全看不见）。有状态的在下面各自覆盖。 */
+    fill: var(--color-text-subtle, #9f8475);
 }
 .pauih-badge.state-risky { fill: var(--color-warm-1, #ee9b3a); }
 .pauih-badge.state-gated { fill: var(--color-text-subtle, #9f8475); }
@@ -179,6 +183,17 @@
     pointer-events: none;
     user-select: none;
 }
+/* 悬停时毂里的补充信息（技能修正值这类参考数）。
+   比原因文字亮一档 —— 它是"想知道才看"的数值，不是警告。 */
+.pauih-hub-detail {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 6px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+}
+
 .pauih-hub-reason.state-risky { fill: var(--color-warm-1, #ee9b3a); }
 .pauih-hub-reason.state-gated { fill: var(--color-text-subtle, #9f8475); }
 

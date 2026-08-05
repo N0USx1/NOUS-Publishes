@@ -57,10 +57,30 @@ export function rankSkills(list: SkillEntry[]): SkillEntry[] {
         || x.label.localeCompare(y.label));
 }
 
-/** 熟练度等级 → 简称，画在扇区角标上。 */
-function rankAbbr(rank: number): string {
-    return ["U", "T", "E", "M", "L"][rank] ?? "U";
+/** 熟练度等级 → 全称，显示在中心毂里。 */
+function rankName(rank: number): string {
+    return ["Untrained", "Trained", "Expert", "Master", "Legendary"][rank] ?? "Untrained";
 }
+
+/**
+ * 补图标 —— 只补 pf2e 没给的那几个。
+ *
+ * ★ 实测 45 个技能动作里 **41 个本来就有专属图标**，缺的只有这 4 个知识类。
+ *   它们的名字又恰好最长（`Recall Knowledge` / `Identify Magic`），
+ *   退回文字就会压出扇区（Nous 2026-08-05 截图：`Occultism Chec…` 溢出）。
+ *
+ * ⚠ 用的是 **Foundry 自带图标库**（`icons/**`，game-icons.net 的 CC BY 3.0 素材，
+ *   随 Foundry 分发）—— 不引入外部资源、不增加分发体积、授权干净。
+ */
+const ICON_FALLBACK: Record<string, string> = {
+    "recall-knowledge": "icons/skills/trades/academics-book-study-runes.webp",
+    "identify-magic": "icons/magic/symbols/question-stone-yellow.webp",
+    "identify-alchemy": "icons/skills/trades/academics-investigation-puzzles.webp",
+    "learn-a-spell": "icons/skills/trades/academics-study-reading-book.webp",
+};
+
+/** 裸检定那一格的图标。每个技能共用同一个 —— 它表达的是"掷这个技能"这件事。 */
+const CHECK_ICON = "icons/skills/trades/academics-scribe-quill-gray.webp";
 
 /** 第一层：角色的技能列表。 */
 export function collectSkills(actor: ActorPF2e | null): SectorData[] {
@@ -92,8 +112,9 @@ export function collectSkills(actor: ActorPF2e | null): SectorData[] {
             label: s.label,
             cost: null,
             state: "normal",
-            // 修正值与熟练度：玩家最想先看到的就是这两个数
-            badge: `${s.mod >= 0 ? "+" : ""}${s.mod} ${rankAbbr(s.rank)}`,
+            // ★ 修正值走 detail（悬停时在毂里显示），**不印在扇区上** ——
+            //   扇区底下挂一行小字既挤又难认（Nous 2026-08-05 指出）。
+            detail: `${s.mod >= 0 ? "+" : ""}${s.mod} · ${rankName(s.rank)}`,
         }));
     } catch (err) {
         console.error("player-action-ui-hub | collectSkills 失败", err);
@@ -115,10 +136,13 @@ export function collectSkillActions(actor: ActorPF2e | null, skillSlug: string):
         if (stat) {
             out.push({
                 id: `skillcheck:${skillSlug}`,
-                label: `${stat.label} Check`,
+                // ⚠ 只叫 "Check" 而不是 "<技能> Check"：**层标题已经是技能名了**，
+                //   重复一遍既冗余又长到压出扇区（`Occultism Check` 实测溢出）。
+                label: "Check",
+                img: CHECK_ICON,
                 cost: null,
                 state: "normal",
-                badge: `${stat.mod >= 0 ? "+" : ""}${stat.mod}`,
+                detail: `${stat.label} ${stat.mod >= 0 ? "+" : ""}${stat.mod}`,
             });
         }
 
@@ -129,7 +153,8 @@ export function collectSkillActions(actor: ActorPF2e | null, skillSlug: string):
             out.push({
                 id: `action:${act.slug}`,
                 label: game.i18n.localize(act.name),
-                img: act.img,
+                // pf2e 没给图标的那几个用本地库补上，否则长名字会压出扇区
+                img: act.img ?? ICON_FALLBACK[act.slug],
                 cost: costToSectorCost(act.cost),
                 state: "normal",
             });

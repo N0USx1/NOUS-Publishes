@@ -43,6 +43,31 @@ const AppV2 = foundry.applications.api.ApplicationV2;
 /** 中心毂一行能放几个"全宽字"。毂半径 56、字号 5.2，留边后约 16。 */
 const HUB_CHARS_PER_LINE = 16;
 
+/*
+ * ===== 中心毂的垂直节奏（2026-08-05 重排）=====
+ *
+ * ⚠ 上一版让职业状态行"从经济行往上凑"（`CY+20+(i-len)*6.5`），
+ *   一行时算出来是 CY+13.5，正好压在 MAP 读数的 CY+16 上 —— Nous 截图里
+ *   `✦ Focus 1/1` 和 `◆ +14` 叠成一团就是这么来的。
+ *
+ * ★ 改成**每一行各有固定槽位**，自上而下四段，互不挤占：
+ *     标题块（层名 / 悬停项名 + 断行的原因）—— 块中心固定，内容多时向两侧长
+ *     MAP 读数 或 页码 —— 二选一，永不同时出现（见 #arrowMode）
+ *     职业状态 —— **强制一行**，多条用 " · " 接起来（毂里放不下两行）
+ *     动作经济 —— 固定在最下
+ *
+ *   槽位固定的代价是没内容时留白，好处是**有内容时永远不会打架**，
+ *   而且各行位置不随内容跳动。
+ */
+/** 标题+原因块的垂直中心。略高于毂心，给下面三行让路。 */
+const HUB_TITLE_CENTER = CY - 4;
+/** MAP 读数 / 页码 */
+const HUB_VARIANT_Y = CY + 19;
+/** 职业状态（单行） */
+const HUB_STATE_Y = CY + 28;
+/** 动作经济行（固定最下） */
+const HUB_ECONOMY_Y = CY + 38;
+
 /**
  * 底部导航胶囊 —— **它就是一段带端帽的分段弧**，和外环同构。
  *
@@ -57,28 +82,59 @@ const HUB_CHARS_PER_LINE = 16;
  *   ⚠ 当初放弃弧形的理由写的是「弧形要拟合极坐标去还原一个只能目测的形状，
  *     连着三版比例都没对上」—— 挡路的是**目测**，不是弧形。现在不目测了。
  */
-const CAP_H = 23;                          // 胶囊厚度（径向）
+/**
+ * 扇区之间的缝（弧度）。**整个盘面只有这一个缝隙尺度** ——
+ * 环与胶囊之间也用它，视觉节奏才连得上（见 GAP_ANGLE 的推导）。
+ */
+const SECTOR_GAP = 0.02;
+
+/**
+ * 胶囊厚度（径向）。
+ *
+ * ★ 2026-08-05 由 23 改为 `2 * W` —— 与环**等宽**。
+ *   原来窄 4（内缘 75 vs 73、外缘 98 vs 100），加上角向的缝偏大，
+ *   胶囊看着是"飘在缺口里的另一个物件"而不是环上切下来的一段（Nous 指出）。
+ *   等宽之后内外缘完全对齐，接缝只剩角向那一处。
+ */
+const CAP_H = 2 * W;
 const W_CAP = CAP_H / 2;                   // 胶囊的"笔半径"
 const CAP_SEAM = 1.6;                      // 格与格之间的缝（弧长），露底作分隔
 /** 胶囊墨迹一共跨多少角（**含**它自己两端的圆头） */
 const CAP_INK = (56 * Math.PI) / 180;
-/** 胶囊与环两端圆头之间留多少角（Nous：「端帽往两边挤挤，给胶囊挪位置」） */
-const CAP_CLEAR = (4 * Math.PI) / 180;
 
 /**
  * 环端帽往外凸多少（1 = 满半圆，小于 1 沿切向收扁）。
- * 当前取 1 —— 「往两边挤挤」靠的是 CAP_CLEAR 让位，不是把端帽削瘦。
- * 这个旋钮管的是端头胖瘦，是另一个维度，需要时再调。
+ * 这个旋钮管的是端头胖瘦，与缝隙是两个维度，需要时再调。
  */
 const CAP_BULGE = 1;
 
 /**
- * 环底缺口 = 胶囊墨迹 ＋ 两侧留白 ＋ **环自己两端圆头多占的角**。
+ * 环底缺口的张角。
  *
- * ★ 最后一项最容易漏：圆头在笔心之外还要凸 `asin(W/R)`，每端一份。
- *   漏掉它圆头就会侵进缺口、压住胶囊 —— 这是 2026-08-05 修掉的原始 bug。
+ * ★★ **解出来的，不是估的**（2026-08-05 重推，claude-draws 的规矩）。
+ *
+ *   上一版写的是 `CAP_INK + 2*CAP_CLEAR + 2*capOvershoot(...)`，把 `CAP_CLEAR`
+ *   当成"墨迹之间的留白"来填。但那两者不是一回事 —— 实测量出来墨迹缝隙是
+ *   **5.1°**，而 `CAP_CLEAR` 填的是 4°，且扇区之间的缝只有 1.15°，
+ *   三个数对不上，胶囊于是看着没接上。
+ *
+ *   差值来自两处**被漏掉的收缩**：扇区首尾各让出 `SECTOR_GAP/2`，
+ *   胶囊首尾也各让出自己那份缝的一半。把它们算进去，反解出缺口该多大：
+ *
+ *     环墨迹末端（距正下方） = GAP_ANGLE/2 + SECTOR_GAP/2 − capOvershoot(R, W)
+ *     胶囊墨迹边界（距正下方） = CAP_INK/2 − capGapHalf
+ *     令两者之差 = SECTOR_GAP（与扇区之间同一个缝）
+ *
+ *   ⚠ 端帽那一项仍然不能漏：圆头在笔心之外还要凸 `asin(W/R)`，每端一份。
+ *     漏掉它圆头会侵进缺口压住胶囊 —— 那是更早修掉的原始 bug，别退回去。
  */
-const GAP_ANGLE = CAP_INK + 2 * CAP_CLEAR + 2 * capOvershoot(R, W, CAP_BULGE);
+const CAP_GAP_HALF = (CAP_SEAM / R) / 2;
+const GAP_ANGLE = 2 * (
+    CAP_INK / 2 - CAP_GAP_HALF          // 胶囊墨迹占的半角
+    + SECTOR_GAP                        // 要留的缝，与扇区之间一致
+    + capOvershoot(R, W, CAP_BULGE)     // 环端帽多占的
+    - SECTOR_GAP / 2                    // 扇区首尾自己让出的那半个缝
+);
 /** 扇区实际占的弧长 */
 const ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
 
@@ -209,7 +265,7 @@ export class WheelApp extends AppV2 {
          */
         const visible = this.#visibleSectors();
         const total = visible.length;
-        const ring = { cx: CX, cy: CY, R, W, total, gap: 0.02, arcSpan: ARC_SPAN };
+        const ring = { cx: CX, cy: CY, R, W, total, gap: SECTOR_GAP, arcSpan: ARC_SPAN };
 
         visible.forEach(({ sector, index }, pos) => {
             /*
@@ -421,21 +477,31 @@ export class WheelApp extends AppV2 {
             g.appendChild(t);
         };
 
-        // 翻选已移到底部胶囊里，毂文字可以正正居中
-        const center = CY;
+        const center = HUB_TITLE_CENTER;
 
         if (!sector) {
             line(this.level.title, center, "pauih-hub-title");
         } else {
-            // 有悬停：第一行项目名，下面是断好行的原因
+            /*
+             * 有悬停：项目名 + 补充信息 + 断好行的原因。
+             *
+             * ★ `detail`（技能修正值这类参考数）显示在这里，**不印在扇区上** ——
+             *   扇区底下挂一行小字既挤又难认（Nous 2026-08-05 截图指出）。
+             *   毂本来就是信息呈现区，悬停看它就够了。
+             */
+            const detailLines = sector.detail ? [sector.detail] : [];
             const reasonLines = sector.reason ? wrapText(sector.reason, HUB_CHARS_PER_LINE) : [];
             const lineHeight = 7;
-            // 整块（标题 + 原因）垂直居中于 center
-            const blockHeight = (reasonLines.length ? reasonLines.length * lineHeight + 5 : 0);
+            const extra = detailLines.length + reasonLines.length;
+            const blockHeight = extra ? extra * lineHeight + 5 : 0;
             let y = center - blockHeight / 2;
 
             line(sector.label, y, "pauih-hub-title");
             y += 9;
+            for (const d of detailLines) {
+                line(d, y, "pauih-hub-detail");
+                y += lineHeight;
+            }
             for (const l of reasonLines) {
                 line(l, y, `pauih-hub-reason state-${sector.state}`);
                 y += lineHeight;
@@ -458,10 +524,10 @@ export class WheelApp extends AppV2 {
         if (mode === "page") {
             const total = this.#pageCount();
             line(`${normalizePage(this.level.paging!.page, total) + 1} / ${total}`,
-                 CY + 16, "pauih-variant");
+                 HUB_VARIANT_Y, "pauih-variant");
         } else if (this.level.variant?.labels.length) {
             const v = this.level.variant;
-            line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
+            line(v.labels[v.index] ?? "", HUB_VARIANT_Y, "pauih-variant");
         }
 
         /*
@@ -472,22 +538,12 @@ export class WheelApp extends AppV2 {
          * ⚠ 没内容时一行都不画，且**不占位**：下面的动作经济行位置固定，
          *   所以状态行往上排，有几行画几行。
          */
+        // ⚠ **强制拼成一行**：毂里放不下两行状态（放下也会压到 MAP 读数或经济行）。
+        //   多条状态用 " · " 接起来，宁可挤一点也不让它们互相盖住。
         const state = this.classState?.() ?? [];
-        state.forEach((line, i) => {
-            // 从经济行往上垒，避免有无状态时经济行跳位
-            line_(line, CY + 20 + (i - state.length) * 6.5);
-        });
+        if (state.length) line(state.join(" · "), HUB_STATE_Y, "pauih-class-state");
 
         this.#paintEconomy(g);
-
-        function line_(text: string, y: number): void {
-            const t = document.createElementNS(SVG_NS, "text");
-            t.setAttribute("x", String(CX));
-            t.setAttribute("y", String(y));
-            t.setAttribute("class", "pauih-class-state");
-            t.textContent = text;
-            g.appendChild(t);
-        }
     }
 
     /**
@@ -501,7 +557,7 @@ export class WheelApp extends AppV2 {
         const econ = this.economy?.();
         if (!econ) return;                     // 不在战斗中：没有回合，画点数是假信息
 
-        const y = CY + 27;
+        const y = HUB_ECONOMY_Y;
         const pipDx = 8;
         const pips = glyphs(econ.remaining);
         /*
