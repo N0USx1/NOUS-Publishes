@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ActorPF2e } from "foundry-pf2e";
-import { collectStrikes } from "../src/collector";
+import { collectStrikes } from "../../src/collectors/strikes";
 
 /**
  * 造一个测试替身 actor。

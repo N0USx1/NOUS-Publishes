@@ -557,7 +557,7 @@ function resolveActor() {
 }
 __name(resolveActor, "resolveActor");
 
-// src/collector.ts
+// src/collectors/strikes.ts
 function isStrike(action) {
   return action?.type === "strike";
 }

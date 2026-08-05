@@ -1,5 +1,5 @@
 import type { ActorPF2e } from "foundry-pf2e";
-import { strikeSectorId, strikesOf, type WheelStrike } from "./collector";
+import { strikeSectorId, strikesOf, type WheelStrike } from "./collectors/strikes";
 
 /**
  * 按扇区 id 回查 strike 对象。

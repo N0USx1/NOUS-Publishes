@@ -1,7 +1,7 @@
 import type { ActorPF2e, ItemPF2e } from "foundry-pf2e";
 import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
-import { collectStrikes } from "./collector";
+import { collectStrikes } from "./collectors/strikes";
 import { rollStrike, execAuxiliary } from "./executor";
 import * as economy from "./economy";
 import type { WheelLevel } from "./types";

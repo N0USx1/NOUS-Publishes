@@ -1,5 +1,5 @@
 import type { ActorPF2e, CharacterStrike } from "foundry-pf2e";
-import type { SectorData } from "./types";
+import type { SectorData } from "../types";
 
 /**
  * 我们眼里的一条打击。
