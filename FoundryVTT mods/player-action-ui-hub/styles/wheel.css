@@ -265,6 +265,19 @@
 .pauih-pip.full { fill: var(--color-text-primary, #efe6d8); }   /* 还剩的：亮 */
 .pauih-pip.over { fill: var(--color-warm-2, #c9593f); }         /* 超支：警示色 */
 
+/* 反应记号 ⟳ —— 与动作菱形**同排但另一个池**。
+   ★ 故意用不同字形而不是第四个 ◆：反应不占常规动作，
+     画成第四个菱形会被读成"这回合有四个动作"，那是把规则简化错了。 */
+.pauih-reaction {
+    font-size: 8.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+    fill: var(--color-text-subtle, #9f8475);   /* 用掉了：暗 */
+}
+.pauih-reaction.full { fill: var(--color-text-primary, #efe6d8); }   /* 还有：亮 */
+
 .pauih-undo {
     font-size: 10px;
     font-weight: bold;

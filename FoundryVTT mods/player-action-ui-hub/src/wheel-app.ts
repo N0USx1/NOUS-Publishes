@@ -1,7 +1,7 @@
 import { sectorArc, sectorCentroid, ringCapPath, capOvershoot } from "./geometry";
 import type { WheelLevel, SectorData } from "./types";
 import { wrapText } from "./text";
-import { glyphs } from "./economy";
+import { glyphs, reactionGlyph } from "./economy";
 import { pageOf, pageCount, normalizePage } from "./paging";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -138,7 +138,12 @@ export class WheelApp extends AppV2 {
      * 取动作经济现状的回调，由外部注入。
      * **不在战斗中要返回 null** —— 战斗外没有"回合"，画 ◆◆◇ 是假信息。
      */
-    economy?: () => { remaining: number; canUndo: boolean } | null;
+    economy?: () => {
+        remaining: number;
+        canUndo: boolean;
+        /** 本轮还剩几个反应；省略表示不画反应记号 */
+        reactionsLeft?: number;
+    } | null;
 
     /** 点了撤回时调用，由外部注入（真正的记账退还在外面做）。 */
     onUndo?: () => void;
@@ -469,7 +474,16 @@ export class WheelApp extends AppV2 {
         const y = CY + 27;
         const pipDx = 8;
         const pips = glyphs(econ.remaining);
-        const startX = CX - ((pips.length - 1) * pipDx) / 2 - 7;
+        /*
+         * ★ 反应记号用**另一个字形** ⟳/⟲，不是第四个 ◆（Nous 2026-08-05 定）。
+         *   反应不占常规动作，画成第四个菱形会让人以为这回合有四个动作 ——
+         *   那正是"把规则简化错了"的样子。
+         *   `reactionsLeft` 为 undefined 表示这个来源还没接反应池，那就整个不画。
+         */
+        const hasReaction = econ.reactionsLeft !== undefined;
+        // 整行（动作记号 + ⟳ + 撤回）居中：先算总宽，再定起点
+        const cells = pips.length + (hasReaction ? 1 : 0);
+        const startX = CX - ((cells - 1) * pipDx) / 2 - 7;
 
         [...pips].forEach((ch, i) => {
             const t = document.createElementNS(SVG_NS, "text");
@@ -480,8 +494,19 @@ export class WheelApp extends AppV2 {
             g.appendChild(t);
         });
 
+        if (hasReaction) {
+            const left = econ.reactionsLeft!;
+            const t = document.createElementNS(SVG_NS, "text");
+            // 与动作记号之间留半格，读作"另一个池"而不是同一串的第四个
+            t.setAttribute("x", String(startX + pips.length * pipDx + pipDx / 2));
+            t.setAttribute("y", String(y));
+            t.setAttribute("class", `pauih-reaction${left > 0 ? " full" : ""}`);
+            t.textContent = reactionGlyph(left);
+            g.appendChild(t);
+        }
+
         const undo = document.createElementNS(SVG_NS, "text");
-        undo.setAttribute("x", String(startX + pips.length * pipDx + 3));
+        undo.setAttribute("x", String(startX + cells * pipDx + (hasReaction ? pipDx / 2 : 0) + 3));
         undo.setAttribute("y", String(y));
         undo.setAttribute("class", `pauih-undo${econ.canUndo ? "" : " disabled"}`);
         undo.textContent = "«";

@@ -89,6 +89,7 @@ __name(wrapText, "wrapText");
 
 // src/economy.ts
 var ACTIONS_PER_TURN = 3;
+var REACTIONS_PER_TURN = 1;
 var ledgers = /* @__PURE__ */ new Map();
 function costToPoints(cost) {
   switch (cost) {
@@ -106,7 +107,7 @@ __name(costToPoints, "costToPoints");
 function ledgerFor(actorId, round) {
   const cur = ledgers.get(actorId);
   if (!cur || cur.round !== round) {
-    const fresh = { spent: 0, round, history: [] };
+    const fresh = { spent: 0, round, history: [], reactions: 0 };
     ledgers.set(actorId, fresh);
     return fresh;
   }
@@ -136,6 +137,14 @@ function canUndo(actorId, round) {
   return ledgerFor(actorId, round).history.length > 0;
 }
 __name(canUndo, "canUndo");
+function reactionsLeft(actorId, round) {
+  return REACTIONS_PER_TURN - ledgerFor(actorId, round).reactions;
+}
+__name(reactionsLeft, "reactionsLeft");
+function spendReaction(actorId, round) {
+  ledgerFor(actorId, round).reactions += 1;
+}
+__name(spendReaction, "spendReaction");
 function glyphs(remainingCount) {
   if (remainingCount >= 0) {
     const left = Math.min(remainingCount, ACTIONS_PER_TURN);
@@ -144,6 +153,10 @@ function glyphs(remainingCount) {
   return "\u25C7".repeat(ACTIONS_PER_TURN) + "\u2715".repeat(Math.min(-remainingCount, 3));
 }
 __name(glyphs, "glyphs");
+function reactionGlyph(left) {
+  return left > 0 ? "\u27F3" : "\u27F2";
+}
+__name(reactionGlyph, "reactionGlyph");
 
 // src/paging.ts
 var PAGE_SIZE = 7;
@@ -462,7 +475,9 @@ var WheelApp = class extends AppV2 {
     const y = CY + 27;
     const pipDx = 8;
     const pips = glyphs(econ.remaining);
-    const startX = CX - (pips.length - 1) * pipDx / 2 - 7;
+    const hasReaction = econ.reactionsLeft !== void 0;
+    const cells = pips.length + (hasReaction ? 1 : 0);
+    const startX = CX - (cells - 1) * pipDx / 2 - 7;
     [...pips].forEach((ch, i) => {
       const t = document.createElementNS(SVG_NS, "text");
       t.setAttribute("x", String(startX + i * pipDx));
@@ -471,8 +486,17 @@ var WheelApp = class extends AppV2 {
       t.textContent = ch;
       g.appendChild(t);
     });
+    if (hasReaction) {
+      const left = econ.reactionsLeft;
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", String(startX + pips.length * pipDx + pipDx / 2));
+      t.setAttribute("y", String(y));
+      t.setAttribute("class", `pauih-reaction${left > 0 ? " full" : ""}`);
+      t.textContent = reactionGlyph(left);
+      g.appendChild(t);
+    }
     const undo = document.createElementNS(SVG_NS, "text");
-    undo.setAttribute("x", String(startX + pips.length * pipDx + 3));
+    undo.setAttribute("x", String(startX + cells * pipDx + (hasReaction ? pipDx / 2 : 0) + 3));
     undo.setAttribute("y", String(y));
     undo.setAttribute("class", `pauih-undo${econ.canUndo ? "" : " disabled"}`);
     undo.textContent = "\xAB";
@@ -783,6 +807,71 @@ function collectActions(actor) {
 }
 __name(collectActions, "collectActions");
 
+// src/collectors/class-abilities.ts
+function belongsToClass(item, classSlug, resolve) {
+  const seen = /* @__PURE__ */ new Set();
+  let cur = item;
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    if (cur.traits?.includes(classSlug)) return true;
+    cur = cur.grantedById ? resolve(cur.grantedById) : void 0;
+  }
+  return false;
+}
+__name(belongsToClass, "belongsToClass");
+function pickClassItems(items, classSlug, resolve) {
+  if (!classSlug) return [];
+  return items.filter((i) => {
+    if (i.actionType === "passive") return false;
+    return belongsToClass(i, classSlug, resolve);
+  });
+}
+__name(pickClassItems, "pickClassItems");
+function className(actor) {
+  return actor?.class?.name ?? null;
+}
+__name(className, "className");
+function collectClassAbilities(actor) {
+  try {
+    const classSlug = actor?.class?.slug ?? null;
+    if (!classSlug) return [];
+    const items = (actor?.items?.contents ?? []).map((i) => ({
+      id: i.id,
+      name: i.name,
+      type: i.type,
+      img: i.img,
+      traits: i.system?.traits?.value ?? [],
+      actionType: i.system?.actionType?.value,
+      actions: i.system?.actions?.value ?? null,
+      category: i.system?.category,
+      grantedById: i.flags?.pf2e?.grantedBy?.id ?? null
+    }));
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const resolve = /* @__PURE__ */ __name((id) => byId.get(id), "resolve");
+    return pickClassItems(items, classSlug, resolve).map((i) => {
+      const cost = i.actionType === "reaction" ? "reaction" : i.actionType === "free" ? "free" : costToSectorCost(i.actions ?? null);
+      return {
+        id: `class:${i.id}`,
+        label: i.name,
+        // ⚠ 实测 actor 自带的动作条目 **3/3 都是通用消耗图标**
+        //   （`systems/pf2e/icons/actions/OneAction.webp` 之流），
+        //   一圈全长一样就失去区分度 → 只有专属图标才用图标，否则退回文字。
+        //   （设计定档 §7 的"已知限制"，2026-08-05 实测坐实。）
+        img: i.img && !i.img.startsWith("systems/pf2e/icons/actions/") ? i.img : void 0,
+        cost,
+        // ★ 反应在扇区上直接标出来（Nous 2026-08-05 定"用记号区分"）：
+        //   它与主动动作混在同一圈里，不标的话玩家会以为它花掉一个动作。
+        badge: cost === "reaction" ? "\u27F3" : void 0,
+        state: "normal"
+      };
+    });
+  } catch (err) {
+    console.error("player-action-ui-hub | collectClassAbilities \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(collectClassAbilities, "collectClassAbilities");
+
 // src/executor.ts
 function findStrike(actor, strikeId) {
   return strikesOf(actor).find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
@@ -915,6 +1004,21 @@ function openAt(x, y) {
       });
       return;
     }
+    if (s.id === "class") {
+      const sectors = collectClassAbilities(actor);
+      if (!sectors.length) {
+        ui.notifications.info("This character has no class abilities to use.");
+        return;
+      }
+      openWheel.rebuild = void 0;
+      void openWheel.setLevel({
+        title: className(actor) ?? "Class",
+        canGoBack: true,
+        paging: { page: 0 },
+        sectors
+      });
+      return;
+    }
     if (s.id === "__back") {
       openWheel.rebuild = void 0;
       void openWheel.setLevel(level);
@@ -939,12 +1043,31 @@ function openAt(x, y) {
       void useAction(actor, slug, ev).then(() => openWheel?.close());
       return;
     }
+    if (s.id.startsWith("class:")) {
+      const itemId = s.id.slice("class:".length);
+      const item = actor.items.get(itemId);
+      if (!item) {
+        ui.notifications.warn("That ability is no longer available \u2014 reopen the wheel.");
+        return;
+      }
+      const round = currentRound(actor);
+      if (round !== null) {
+        if (s.cost === "reaction") spendReaction(actor.id, round);
+        else spend(actor.id, round, costToPoints(s.cost));
+      }
+      void game.pf2e.rollItemMacro(item.uuid).then(() => openWheel?.close());
+      return;
+    }
     ui.notifications.info(`"${s.label}" is not implemented yet.`);
   });
   openWheel.economy = () => {
     const round = currentRound(actor);
     if (round === null) return null;
-    return { remaining: remaining(actor.id, round), canUndo: canUndo(actor.id, round) };
+    return {
+      remaining: remaining(actor.id, round),
+      canUndo: canUndo(actor.id, round),
+      reactionsLeft: reactionsLeft(actor.id, round)
+    };
   };
   openWheel.onUndo = () => {
     const round = currentRound(actor);

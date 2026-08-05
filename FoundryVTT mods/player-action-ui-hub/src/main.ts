@@ -3,6 +3,7 @@ import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
 import { collectStrikes } from "./collectors/strikes";
 import { collectActions } from "./collectors/actions";
+import { collectClassAbilities, className } from "./collectors/class-abilities";
 import { rollStrike, execAuxiliary, useAction } from "./executor";
 import { registerUsageSetting, bump as bumpUsage } from "./usage";
 import * as economy from "./economy";
@@ -113,6 +114,23 @@ function openAt(x: number, y: number): void {
             return;
         }
 
+        // —— 分类层 → 职业层 ——
+        if (s.id === "class") {
+            const sectors = collectClassAbilities(actor);
+            if (!sectors.length) {
+                ui.notifications.info("This character has no class abilities to use.");
+                return;
+            }
+            openWheel!.rebuild = undefined;
+            void openWheel!.setLevel({
+                title: className(actor) ?? "Class",
+                canGoBack: true,
+                paging: { page: 0 },
+                sectors,
+            });
+            return;
+        }
+
         // —— 打击层 → 分类层 ——
         if (s.id === "__back") {
             // 分类层是四个写死的格子，没有随角色变的东西 → 撤掉重算回调
@@ -156,12 +174,35 @@ function openAt(x: number, y: number): void {
             return;
         }
 
+        // —— 职业层：执行 ——
+        if (s.id.startsWith("class:")) {
+            const itemId = s.id.slice("class:".length);
+            const item = actor.items.get(itemId);
+            if (!item) {
+                ui.notifications.warn("That ability is no longer available — reopen the wheel.");
+                return;
+            }
+            const round = currentRound(actor);
+            if (round !== null) {
+                // ★ 反应走**另一个池**：它不占常规动作（规则事实，见 economy.ts）
+                if (s.cost === "reaction") economy.spendReaction(actor.id, round);
+                else economy.spend(actor.id, round, economy.costToPoints(s.cost));
+            }
+            // 对照表 §6：职业能力走 rollItemMacro（selfEffect / TokenMark 自动生效）
+            void (game as any).pf2e.rollItemMacro(item.uuid).then(() => openWheel?.close());
+            return;
+        }
+
         ui.notifications.info(`"${s.label}" is not implemented yet.`);
     });
     openWheel.economy = () => {
         const round = currentRound(actor);
         if (round === null) return null;
-        return { remaining: economy.remaining(actor.id, round), canUndo: economy.canUndo(actor.id, round) };
+        return {
+            remaining: economy.remaining(actor.id, round),
+            canUndo: economy.canUndo(actor.id, round),
+            reactionsLeft: economy.reactionsLeft(actor.id, round),
+        };
     };
     openWheel.onUndo = () => {
         const round = currentRound(actor);

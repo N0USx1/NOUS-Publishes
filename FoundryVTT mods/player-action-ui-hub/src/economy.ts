@@ -26,6 +26,14 @@
  */
 export const ACTIONS_PER_TURN = 3;
 
+/**
+ * 一轮的反应额度。PF2e 是每轮 1 个。
+ *
+ * ⚠ 与 `ACTIONS_PER_TURN` 一样是**占位值**：有职业/效果给额外反应。
+ *   同属③段参数化反馈的射程，在那之前**只显示不阻止**。
+ */
+export const REACTIONS_PER_TURN = 1;
+
 interface Ledger {
     /** 本回合已花掉多少 */
     spent: number;
@@ -37,6 +45,14 @@ interface Ledger {
      * （骰子已经进聊天栏，谁也收不回；设计定档的诚实条款）。
      */
     history: number[];
+    /**
+     * 本回合用掉几个反应。
+     *
+     * ★ **与 `spent` 是两个独立的池**：反应**不占**常规动作
+     *   （`costToPoints("reaction")` 返回 0，那是规则事实）。
+     *   混在一起记会让玩家以为用了反击就少一个动作 —— 那是把规则简化**错**了。
+     */
+    reactions: number;
 }
 
 const ledgers = new Map<string, Ledger>();
@@ -54,7 +70,7 @@ export function costToPoints(cost: string | null): number {
 function ledgerFor(actorId: string, round: number): Ledger {
     const cur = ledgers.get(actorId);
     if (!cur || cur.round !== round) {
-        const fresh: Ledger = { spent: 0, round, history: [] };
+        const fresh: Ledger = { spent: 0, round, history: [], reactions: 0 };
         ledgers.set(actorId, fresh);
         return fresh;
     }
@@ -98,9 +114,22 @@ export function refund(actorId: string, round: number, n: number): void {
     l.spent = Math.max(0, l.spent - n);
 }
 
+/**
+ * 本回合还剩几个反应。
+ * ★ 与动作是**两个独立的池**：用了反击不该让动作点少一个。
+ */
+export function reactionsLeft(actorId: string, round: number): number {
+    return REACTIONS_PER_TURN - ledgerFor(actorId, round).reactions;
+}
+
+/** 用掉一个反应。同样**只记不拦**，可以记成负余额。 */
+export function spendReaction(actorId: string, round: number): void {
+    ledgerFor(actorId, round).reactions += 1;
+}
+
 /** 回合开始：清零。 */
 export function resetTurn(actorId: string, round: number): void {
-    ledgers.set(actorId, { spent: 0, round, history: [] });
+    ledgers.set(actorId, { spent: 0, round, history: [], reactions: 0 });
 }
 
 /** 全部清空（关世界/换场景时用）。 */
@@ -118,4 +147,15 @@ export function glyphs(remainingCount: number): string {
         return "◆".repeat(left) + "◇".repeat(ACTIONS_PER_TURN - left);
     }
     return "◇".repeat(ACTIONS_PER_TURN) + "✕".repeat(Math.min(-remainingCount, 3));
+}
+
+/**
+ * 反应记号：还有反应用实心 ⟳，用掉了用空心 ⟲。
+ *
+ * ★ 用**另一个字形**而不是第四个 ◆（Nous 2026-08-05 定"用记号区分"）：
+ *   反应不占动作，画成第四个菱形会让人以为这回合有四个动作 ——
+ *   那正是把规则简化**错**了的样子。
+ */
+export function reactionGlyph(left: number): string {
+    return left > 0 ? "⟳" : "⟲";
 }
