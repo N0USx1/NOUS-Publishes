@@ -1,4 +1,5 @@
 import type { ActorPF2e } from "foundry-pf2e";
+import { auraPlanFor, buildAuraEffect } from "./aura-effects";
 
 /**
  * 效果自动化（②段第一步：**只做自身效果**）。
@@ -96,6 +97,20 @@ export async function applySelfEffectAfterCast(
     spell: any,
 ): Promise<string | null> {
     try {
+        /*
+         * ★ 先看这个法术是不是我们接管的**范围增益**（吟游诗人那族 anthem 之类）。
+         *   它们有 area，走不到下面的"自身法术"判据，但正确处理**同样是套给施法者自己** ——
+         *   套的是一个带 Aura 规则元素的 effect，扩散交给 pf2e。
+         *   于是全队覆盖这件事，从头到尾没碰过任何别人的 actor。
+         */
+        const plan = auraPlanFor(spell);
+        if (plan) {
+            if (!(actor as any)?.canUserModify?.(game.user, "update")) return null;
+            const data = buildAuraEffect(plan, (actor as any)?.level ?? 1);
+            await (actor as any).createEmbeddedDocuments("Item", [data]);
+            return `${plan.spec.name} (Aura)`;
+        }
+
         const shape: SpellShape = {
             target: spell?.system?.target?.value ?? null,
             area: spell?.system?.area ?? null,

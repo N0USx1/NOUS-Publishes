@@ -1156,6 +1156,119 @@ function collectSpells(actor, entryId) {
 }
 __name(collectSpells, "collectSpells");
 
+// src/aura-effects.ts
+var AURA_SPECS = [
+  {
+    slug: "courageous-anthem",
+    name: "Courageous Anthem",
+    affects: "allies",
+    rule: "You and all allies in the area gain a +1 status bonus to attack rolls, damage rolls, and saves against fear effects."
+  },
+  {
+    slug: "rallying-anthem",
+    name: "Rallying Anthem",
+    affects: "allies",
+    rule: "You and all allies in the area gain a +1 status bonus to AC and saving throws against fear."
+  },
+  {
+    slug: "triple-time",
+    name: "Triple Time",
+    affects: "allies",
+    rule: "You and all allies in the area gain a +10-foot status bonus to all Speeds."
+  },
+  {
+    slug: "song-of-strength",
+    name: "Song of Strength",
+    affects: "allies",
+    rule: "You and all allies in the area gain a +1 status bonus to Athletics checks."
+  },
+  {
+    slug: "valiant-anthem",
+    name: "Valiant Anthem",
+    affects: "allies",
+    rule: "You and all allies in the area gain a +10-foot status bonus to Speeds and a +1 status bonus to attack rolls."
+  },
+  {
+    slug: "silvers-refrain",
+    name: "Silver's Refrain",
+    affects: "allies",
+    rule: "Weapon and unarmed attacks by allies in the area are treated as silver."
+  },
+  {
+    slug: "frenzied-revelry",
+    name: "Frenzied Revelry",
+    affects: "allies",
+    rule: "You and your allies gain a +1 status bonus to saving throws against mental effects while in the area."
+  },
+  {
+    slug: "coiling-dance",
+    name: "Coiling Dance",
+    affects: "allies",
+    rule: "Your allies in the area are filled with sacred energy, making their spells and attacks holy."
+  }
+];
+function auraSpecFor(slug) {
+  if (!slug) return null;
+  return AURA_SPECS.find((s) => s.slug === slug) ?? null;
+}
+__name(auraSpecFor, "auraSpecFor");
+function radiusAtRank(spell, rank) {
+  const \u57FA\u7840 = Number(spell?.system?.area?.value);
+  const \u8986\u76D6 = spell?.system?.heightening?.levels;
+  let \u503C = Number.isFinite(\u57FA\u7840) ? \u57FA\u7840 : null;
+  if (\u8986\u76D6 && rank) {
+    const \u547D\u4E2D = Object.keys(\u8986\u76D6).map(Number).filter((n) => Number.isFinite(n) && n <= rank).sort((a, b) => a - b).at(-1);
+    const v = \u547D\u4E2D != null ? Number(\u8986\u76D6[String(\u547D\u4E2D)]?.area?.value) : NaN;
+    if (Number.isFinite(v)) \u503C = v;
+  }
+  return \u503C;
+}
+__name(radiusAtRank, "radiusAtRank");
+function auraEffectUuid(spell) {
+  const desc = String(spell?.system?.description?.value ?? "");
+  const links = [...desc.matchAll(/@UUID\[([^\]]+)\]\{([^}]*)\}/g)];
+  const hit = links.find(([, uuid, label]) => uuid.includes("spell-effects") && /^\s*Spell Effect:/i.test(label));
+  return hit?.[1] ?? null;
+}
+__name(auraEffectUuid, "auraEffectUuid");
+function auraPlanFor(spell) {
+  const spec = auraSpecFor(spell?.slug ?? null);
+  if (!spec) return null;
+  const radius = radiusAtRank(spell, spell?.rank ?? spell?.system?.level?.value ?? null);
+  if (!radius) return null;
+  const effectUuid = auraEffectUuid(spell);
+  if (!effectUuid) return null;
+  const traits = [...spell?.system?.traits?.value ?? []];
+  return { spec, radius, traits, effectUuid };
+}
+__name(auraPlanFor, "auraPlanFor");
+function buildAuraEffect(plan, casterLevel) {
+  const { spec, radius, traits, effectUuid } = plan;
+  return {
+    name: `${spec.name} (Aura)`,
+    type: "effect",
+    img: "icons/svg/aura.svg",
+    system: {
+      description: {
+        value: `<p>${spec.rule}</p><p><em>Applied by Player Action UI Hub.</em></p>`
+      },
+      // ⚠ 持续时间跟着法术走；anthem 族都是 1 轮，靠玩家每轮重施
+      duration: { value: 1, unit: "rounds", expiry: "turn-start", sustained: false },
+      level: { value: casterLevel },
+      tokenIcon: { show: true },
+      rules: [{
+        key: "Aura",
+        radius,
+        traits,
+        slug: `pauih-aura-${spec.slug}`,
+        effects: [{ uuid: effectUuid, affects: spec.affects }]
+      }]
+    },
+    flags: { "player-action-ui-hub": { autoApplied: true, auraFor: spec.slug } }
+  };
+}
+__name(buildAuraEffect, "buildAuraEffect");
+
 // src/effects.ts
 function isSelfTargeted(spell) {
   const hasTarget = !!(spell.target && String(spell.target).trim());
@@ -1186,6 +1299,13 @@ async function applyEffect(actor, uuid) {
 __name(applyEffect, "applyEffect");
 async function applySelfEffectAfterCast(actor, spell) {
   try {
+    const plan = auraPlanFor(spell);
+    if (plan) {
+      if (!actor?.canUserModify?.(game.user, "update")) return null;
+      const data = buildAuraEffect(plan, actor?.level ?? 1);
+      await actor.createEmbeddedDocuments("Item", [data]);
+      return `${plan.spec.name} (Aura)`;
+    }
     const shape = {
       target: spell?.system?.target?.value ?? null,
       area: spell?.system?.area ?? null
@@ -1622,7 +1742,14 @@ Hooks.once("ready", () => {
       const w = new WheelApp(demoLevel, (s) => console.log("picked:", s.label));
       void w.openAt(x ?? lastMouse.x, y ?? lastMouse.y);
       return w;
-    }, "demo")
+    }, "demo"),
+    /**
+     * 给游戏内冒烟测试用的纯函数出口。
+     *
+     * ⚠ 暴露的是**真实执行路径上的那几个**，不是给测试另写一份 ——
+     *   另写一份就是又造一个会腐坏的副本，测的还是副本不是产品。
+     */
+    _test: { auraPlanFor, buildAuraEffect }
   };
   function isWheelSummon(ev) {
     return ev.button === 0 && ev.ctrlKey && ev.target?.tagName === "CANVAS";
