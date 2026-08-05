@@ -11,6 +11,7 @@ import { classStateLines, readClassState } from "./class-state";
 import { CATEGORY_ICONS } from "./icons";
 import { auraPlanFor, buildAuraEffect } from "./aura-effects";
 import { savePlanFor, sceneHasGrid, resolveAreaAfterCast } from "./area-effects";
+import { macroFor, levelForStep, unarmedStrikes, type ActionMacro, type MacroContext } from "./macros";
 import * as economy from "./economy";
 import type { WheelLevel, SectorData } from "./types";
 
@@ -39,6 +40,56 @@ function currentRound(actor: ActorPF2e | null): number | null {
 
 /** 当前打开的轮盘；同一时刻只允许一个 */
 let openWheel: WheelApp | null = null;
+
+/**
+ * 正在走的编排（乙类动作）。null = 没在编排。
+ *
+ * ⚠ 每次呼出轮盘都要清掉：上一次编排走到一半被 Esc 关了，状态会留着，
+ *   下次呼出的第一下点击就会被当成"编排的下一步"。
+ */
+let 活跃编排: { macro: ActionMacro; step: number; ctx: MacroContext } | null = null;
+
+/**
+ * 编排推进一步：记下选择，有下一步就换层，没有就执行。
+ *
+ * ★ 翻选条的档位在**离开这一层之前**读走 —— 它是"这次连击从第几击开始"，
+ *   而下一层没有翻选条，读晚了就没了。
+ */
+function 推进编排(actor: ActorPF2e, s: SectorData, ev: MouseEvent): void {
+    const 状态 = 活跃编排;
+    if (!状态) return;
+
+    if (s.id === "__back") {
+        // 退一步；退到头就退出编排、回到职业层
+        状态.ctx.picks.pop();
+        状态.step -= 1;
+        if (状态.step < 0) {
+            活跃编排 = null;
+            const sectors = collectClassAbilities(actor);
+            void openWheel!.setLevel({
+                title: className(actor) ?? "Class", canGoBack: true, paging: { page: 0 }, sectors,
+            });
+            return;
+        }
+        const 回 = levelForStep(actor, 状态.macro, 状态.step, 状态.ctx);
+        if (回) void openWheel!.setLevel(回);
+        return;
+    }
+
+    状态.ctx.variantIndex = openWheel!.currentVariantIndex();
+    状态.ctx.picks.push(s.id);
+    状态.step += 1;
+
+    const 下一层 = levelForStep(actor, 状态.macro, 状态.step, 状态.ctx);
+    if (下一层) {
+        void openWheel!.setLevel(下一层);
+        return;
+    }
+    // 步骤走完 → 执行。执行是终结动作，关盘。
+    const 跑 = 状态.macro.run(actor, 状态.ctx, ev);
+    活跃编排 = null;
+    void 跑.then(() => openWheel?.close());
+}
 /**
  * 当前轮盘是为**哪个** actor 开的。
  * ⚠ 别在钩子里改用 `resolveActor()` 现算：轮盘开着的时候玩家可能已经改选了别的
@@ -116,7 +167,20 @@ function openAt(x: number, y: number): void {
             cat("spells", "Spells"),
         ],
     };
+    活跃编排 = null;
     openWheel = new WheelApp(level, (s, ev) => {
+        /*
+         * —— 编排中（乙类动作）——
+         *
+         * ★ 必须在**所有其它分支之前**：编排的步骤里列的是打击、法术这些东西，
+         *   扇区 id 与普通层完全一样。不先拦，点第一击就会被打击层的分支接走、
+         *   直接掷出去，编排到此为止 —— 而且不报错。
+         */
+        if (活跃编排) {
+            推进编排(actor, s, ev);
+            return;
+        }
+
         // —— 分类层 → 打击层 ——
         if (s.id === "strikes") {
             const strikeLevel = buildStrikeLevel(actor);
@@ -289,6 +353,26 @@ function openAt(x: number, y: number): void {
                 if (s.cost === "reaction") economy.spendReaction(actor.id, round);
                 else economy.spend(actor.id, round, economy.costToPoints(s.cost));
             }
+
+            /*
+             * ★ 我们接管了的动作（乙类）走编排器：它不是"点一下就完了"，
+             *   而是"再问你两件事然后按规则跑"。
+             *   pf2e 对这些动作**一行代码都没有**（实测连击是零规则元素的纯说明 feat），
+             *   点原生的那条只会把说明贴进聊天栏。
+             */
+            const macro = macroFor((item as any).slug);
+            if (macro) {
+                const 起步 = levelForStep(actor, macro, 0, { picks: [], variantIndex: 0 });
+                if (!起步) {
+                    ui.notifications.info("Nothing available to use with that ability right now.");
+                    return;
+                }
+                活跃编排 = { macro, step: 0, ctx: { picks: [], variantIndex: 0 } };
+                openWheel!.rebuild = undefined;
+                void openWheel!.setLevel(起步);
+                return;
+            }
+
             // 对照表 §6：职业能力走 rollItemMacro（selfEffect / TokenMark 自动生效）
             void (game as any).pf2e.rollItemMacro(item.uuid).then(() => openWheel?.close());
             return;
@@ -386,7 +470,8 @@ Hooks.once("ready", () => {
          * ⚠ 暴露的是**真实执行路径上的那几个**，不是给测试另写一份 ——
          *   另写一份就是又造一个会腐坏的副本，测的还是副本不是产品。
          */
-        _test: { auraPlanFor, buildAuraEffect, savePlanFor, sceneHasGrid, resolveAreaAfterCast },
+        _test: { auraPlanFor, buildAuraEffect, savePlanFor, sceneHasGrid, resolveAreaAfterCast,
+                 macroFor, levelForStep, unarmedStrikes },
     };
 
     // —— 画布上 Ctrl+左键呼出，整串事件全吞 ——

@@ -299,4 +299,62 @@ if (!减益.当前场景有网格) {
           v => String(v).includes("no grid"), "返回 no grid 的说明");
 }
 
+/* ── 10. 乙类编排器：武僧连击 ──────────────────
+ *
+ * ★ 单测用的是我手造的 actor 形状；这一组问的是**真角色身上是不是那个形状**。
+ *   夹具漏了 `type: "strike"` 那次就是提醒：造出来的尺子和真东西可以差一个字段。
+ *
+ * ⚠ 临时造一个武僧再删掉 —— 测试世界里没有武僧，而"武僧点连击"是这条链路的入口。
+ */
+section("乙类编排器 · 武僧连击");
+const 连击 = await evaluate(`
+${PRELUDE}
+const out = {};
+// ① 真角色身上的徒手打击，形状对不对
+const 真 = game.actors.getName("Nous offnirr") ?? game.actors.filter(a => a.type === "character")[0];
+const 徒手 = pauih._test.unarmedStrikes(真);
+out.真角色徒手数 = 徒手.length;
+out.档位标签 = 徒手[0]?.strike?.variants?.map(v => v.label) ?? null;
+out.扇区id样式 = 徒手[0]?.id ?? null;
+
+// ② 造一个武僧，走完"点连击 → 出第一步盘面"
+let 武僧 = null;
+try {
+  武僧 = await Actor.create({ name: "PAUIH temp monk", type: "character" });
+  let feat = null;
+  for (const p of game.packs.filter(p => p.metadata.type === "Item")) {
+    const hit = (await p.getIndex({ fields: ["type","system.slug"] }))
+      .find(e => e.system?.slug === "flurry-of-blows");
+    if (hit) { feat = await p.getDocument(hit._id); break; }
+  }
+  out.找得到连击feat = !!feat;
+  if (feat) {
+    const [装上] = await 武僧.createEmbeddedDocuments("Item", [feat.toObject()]);
+    out.slug认得出 = !!pauih._test.macroFor(装上.slug);
+    const 一 = pauih._test.levelForStep(武僧, pauih._test.macroFor(装上.slug), 0, { picks: [], variantIndex: 0 });
+    out.第一步 = 一 ? { 标题: 一.title, 条数: 一.sectors.length, 有翻选条: !!一.variant } : null;
+    const 二 = pauih._test.levelForStep(武僧, pauih._test.macroFor(装上.slug), 1, { picks: ["x"], variantIndex: 0 });
+    out.第二步 = 二 ? { 标题: 二.title, 条数: 二.sectors.length, 有翻选条: !!二.variant } : null;
+    out.第三步是null = pauih._test.levelForStep(武僧, pauih._test.macroFor(装上.slug), 2, { picks: ["x","y"], variantIndex: 0 }) === null;
+  }
+} finally {
+  if (武僧) { await 武僧.delete(); }
+}
+out.删干净了 = !game.actors.getName("PAUIH temp monk");
+return out;
+`);
+check("真角色身上认得出徒手打击", 连击.真角色徒手数, v => v >= 1, ">= 1");
+check("★ MAP 档位标签由 pf2e 给（徒手带敏捷是 -4/-8，不是 -5/-10）",
+      连击.档位标签, v => Array.isArray(v) && v.length === 3 && String(v[1]).includes("MAP"),
+      "三档且第二档带 MAP 文案");
+check("扇区 id 用 collector 的同一份编号", 连击.扇区id样式, v => String(v).startsWith("strike:"));
+check("pf2e 里找得到连击 feat", 连击.找得到连击feat, true);
+check("★ 装上之后 slug 认得出来（编排器接得上）", 连击.slug认得出, true);
+check("第一步有徒手可选", 连击.第一步?.条数, v => v >= 1, ">= 1");
+check("★ 翻选条只在第一步（它选的是起始 MAP）", 连击.第一步?.有翻选条, true);
+check("第二步没有翻选条", 连击.第二步?.有翻选条, false);
+check("第二步照样列全部徒手", 连击.第二步?.条数, 连击.第一步?.条数);
+check("两步走完就该执行了", 连击.第三步是null, true);
+check("测试没在世界里留垃圾", 连击.删干净了, true);
+
 process.exit(report());
