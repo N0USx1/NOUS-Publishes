@@ -1,13 +1,18 @@
 import { describe, it, expect } from "vitest";
-import {
-    AURA_SPECS, auraSpecFor, auraEffectUuid, radiusAtRank, auraPlanFor, buildAuraEffect,
-} from "../src/aura-effects";
+import { AURA_SPECS, auraSpecFor, auraPlanFor, buildAuraEffect } from "../src/aura-effects";
+import { linkedSpellEffectUuid as auraEffectUuid, radiusAtRank } from "../src/spell-data";
 
-/** 造一个最小法术形状，字段名与 pf2e 实测一致。 */
+/**
+ * 造一个最小法术形状，字段名与 pf2e 实测一致。
+ *
+ * ⚠ `...over` 必须在 `system` **之前**展开，否则它会把合并好的 system 整个盖掉，
+ *   夹具就只剩下调用方写的那一两个字段 —— 断言看着通过，其实测的是别的东西。
+ */
 function 法术(over: Record<string, any> = {}) {
     return {
         slug: "courageous-anthem",
         rank: 1,
+        ...over,
         system: {
             area: { type: "emanation", value: 60 },
             traits: { value: ["bard", "cantrip", "composition", "emotion", "mental"] },
@@ -16,7 +21,6 @@ function 法术(over: Record<string, any> = {}) {
             },
             ...over.system,
         },
-        ...over,
     };
 }
 

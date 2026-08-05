@@ -25,6 +25,8 @@
  *   实测"按效果数值符号推受众"在 4 个可对拍样本里错了 2 个（50%），不可用。
  */
 
+import { radiusAtRank, rankOf, linkedSpellEffectUuid } from "./spell-data";
+
 /** 一个法术的受众登记。**只有这一样推不出来**，其余全从法术读。 */
 export interface AuraSpec {
     /** 法术 slug */
@@ -93,45 +95,6 @@ export interface AuraPlan {
 }
 
 /**
- * 升阶后的半径。
- *
- * ★ **不能读 `system.area.value`** —— 实测（Frenzied Revelry 5→10→15）升阶半径
- *   存在 `system.heightening.levels[阶].area.value` 这张**覆盖表**里，
- *   **不会落到基础字段上**。读基础字段拿到的是"没应用升阶的值"，
- *   而它在最常见的基础阶下正好是对的，所以平时测不出来。
- *
- * ⚠ 覆盖表按阶给点，不是每阶都有 —— 取**不超过施放阶数的最高那一档**。
- */
-export function radiusAtRank(spell: any, rank: number | null | undefined): number | null {
-    const 基础 = Number(spell?.system?.area?.value);
-    const 覆盖 = spell?.system?.heightening?.levels;
-    let 值 = Number.isFinite(基础) ? 基础 : null;
-    if (覆盖 && rank) {
-        const 命中 = Object.keys(覆盖)
-            .map(Number).filter(n => Number.isFinite(n) && n <= rank)
-            .sort((a, b) => a - b).at(-1);
-        const v = 命中 != null ? Number(覆盖[String(命中)]?.area?.value) : NaN;
-        if (Number.isFinite(v)) 值 = v;
-    }
-    return 值;
-}
-
-/**
- * 从法术描述里取它自带的 Spell Effect UUID。
- *
- * ⚠ 与 `effects.ts` 的 `selfEffectUuid` 同一判据（`Spell Effect:` 前缀），
- *   但这里**不能复用它** —— 那个函数的语义是"施放即套给自己"，
- *   这里要的是"发给范围内每个目标"。判据一样，含义不同，合并会把两件事绑死。
- */
-export function auraEffectUuid(spell: any): string | null {
-    const desc = String(spell?.system?.description?.value ?? "");
-    const links = [...desc.matchAll(/@UUID\[([^\]]+)\]\{([^}]*)\}/g)];
-    const hit = links.find(([, uuid, label]) =>
-        uuid.includes("spell-effects") && /^\s*Spell Effect:/i.test(label));
-    return hit?.[1] ?? null;
-}
-
-/**
  * 这个法术能不能走 aura 路径；能的话，值全部从它自己身上取。
  *
  * @returns 取不齐（没登记 / 没 area / 没自带效果）一律返回 null ——
@@ -140,9 +103,9 @@ export function auraEffectUuid(spell: any): string | null {
 export function auraPlanFor(spell: any): AuraPlan | null {
     const spec = auraSpecFor(spell?.slug ?? null);
     if (!spec) return null;
-    const radius = radiusAtRank(spell, spell?.rank ?? spell?.system?.level?.value ?? null);
+    const radius = radiusAtRank(spell, rankOf(spell));
     if (!radius) return null;
-    const effectUuid = auraEffectUuid(spell);
+    const effectUuid = linkedSpellEffectUuid(spell);
     if (!effectUuid) return null;
     const traits: string[] = [...(spell?.system?.traits?.value ?? [])];
     return { spec, radius, traits, effectUuid };

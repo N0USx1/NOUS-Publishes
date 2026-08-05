@@ -1,6 +1,7 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import { strikeSectorId, strikesOf, type WheelStrike } from "./collectors/strikes";
 import { applySelfEffectAfterCast } from "./effects";
+import { resolveAreaAfterCast } from "./area-effects";
 
 /**
  * 按扇区 id 回查 strike 对象。
@@ -181,6 +182,22 @@ export async function castSpell(
          */
         const applied = await applySelfEffectAfterCast(actor, spell);
         if (applied) ui.notifications.info(`${applied} applied.`);
+
+        /*
+         * ★ 豁免类范围减益（路径 B）：逐个敌人掷豁免，失败的才套。
+         *   **不能像 aura 那样直接套** —— Bane 的规则是"敌人必须通过 Will 豁免，否则…"，
+         *   直接套等于跳过豁免。
+         *
+         * ⚠ 结果发到聊天栏而不是通知条：它是**多行、要留档**的东西，
+         *   而且部分失败（没权限改敌人）要让 GM 看得见并接手。
+         */
+        const 结算 = await resolveAreaAfterCast(actor, spell);
+        if (结算) {
+            await ChatMessage.create({
+                speaker: ChatMessage.getSpeaker({ actor: actor as any }),
+                content: `<p><strong>${spell.name}</strong></p><p>${结算}</p>`,
+            });
+        }
     } catch (err) {
         console.error("player-action-ui-hub | castSpell 失败", err);
         ui.notifications.error("Casting failed — see the console for details.");

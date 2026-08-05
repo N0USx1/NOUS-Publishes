@@ -10,6 +10,7 @@ import { registerUsageSetting, bump as bumpUsage } from "./usage";
 import { classStateLines, readClassState } from "./class-state";
 import { CATEGORY_ICONS } from "./icons";
 import { auraPlanFor, buildAuraEffect } from "./aura-effects";
+import { savePlanFor, sceneHasGrid, resolveAreaAfterCast } from "./area-effects";
 import * as economy from "./economy";
 import type { WheelLevel, SectorData } from "./types";
 
@@ -385,7 +386,7 @@ Hooks.once("ready", () => {
          * ⚠ 暴露的是**真实执行路径上的那几个**，不是给测试另写一份 ——
          *   另写一份就是又造一个会腐坏的副本，测的还是副本不是产品。
          */
-        _test: { auraPlanFor, buildAuraEffect },
+        _test: { auraPlanFor, buildAuraEffect, savePlanFor, sceneHasGrid, resolveAreaAfterCast },
     };
 
     // —— 画布上 Ctrl+左键呼出，整串事件全吞 ——

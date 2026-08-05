@@ -19,6 +19,7 @@
  *   （服务端 `canUserModify` 实读，见 effects.ts 注释）。改不动的如实报告，不静默跳过。
  */
 import type { ActorPF2e } from "foundry-pf2e";
+import { radiusAtRank, rankOf, linkedSpellEffectUuid, spellDC } from "./spell-data";
 
 /** 一个范围法术要怎么处理。 */
 export interface AreaPlan {
@@ -134,6 +135,121 @@ export async function resolveSaveAgainstEnemies(
         }
     }
     return results;
+}
+
+/* ══════════════════════════════════════════════════════════════
+ * 路径 B 的登记表与接线
+ * ══════════════════════════════════════════════════════════════ */
+
+/**
+ * 需要豁免的范围减益。
+ *
+ * ★ 与 aura 那张表同一条纪律：**只登记推不出来的东西**。
+ *   豁免项（`system.defense.save.statistic`）、半径、效果 UUID 全部实测可从法术读，
+ *   所以这里只剩"接管哪几条"和"哪些成功度算中招"。
+ *
+ * ⚠ **Roar of the Dragon 不在这里**，尽管它也是"emanation + Will 豁免"。
+ *   实测它的 `Spell Effect: Roar of the Dragon` 里只有一条 `FlatModifier:diplomacy` ——
+ *   那是**施法者自己**对龙的 +2 交涉加值，套给敌人正好反了（给敌人发增益）。
+ *   敌人那头是按四档给 `frightened`（**condition 不是 effect**），
+ *   而且规则写明"**GM 判定**谁算与龙有渊源"——目标集合不可推导。
+ *   → 形状不同的东西不要因为字段像就归成一类。
+ *
+ * ⚠ Bane / Malediction 都有"Sustain 一次半径 +10 尺、对**尚未中招**的敌人再掷一次"。
+ *   这里**只处理首次施放**：持续追踪谁已中招是跨回合状态，另算一件事。
+ */
+export interface SaveSpec {
+    slug: string;
+    name: string;
+    /** 规则原文依据 */
+    rule: string;
+    /** 哪些成功度算中招；不写就是默认的失败/大失败 */
+    applyOn?: DegreeName[];
+}
+
+export const SAVE_SPECS: SaveSpec[] = [
+    {
+        slug: "bane", name: "Bane",
+        rule: "Enemies in the area must succeed at a Will save or take a -1 status penalty to attack rolls as long as they are in the area.",
+    },
+    {
+        slug: "malediction", name: "Malediction",
+        rule: "Enemies in the area must succeed at a Will save or take a -1 status penalty to AC as long as they're in the area.",
+    },
+];
+
+export function saveSpecFor(slug: string | null | undefined): SaveSpec | null {
+    if (!slug) return null;
+    return SAVE_SPECS.find(s => s.slug === slug) ?? null;
+}
+
+/**
+ * 从法术本体拼出这次施放的 `AreaPlan`。
+ *
+ * ⚠ 取不齐一律 null。尤其**豁免项必须来自 `system.defense.save.statistic`** ——
+ *   写死"Will"在这两条上碰巧对，换一条法术就错，而且不会报错。
+ */
+export function savePlanFor(spell: any): AreaPlan | null {
+    const spec = saveSpecFor(spell?.slug ?? null);
+    if (!spec) return null;
+    const radius = radiusAtRank(spell, rankOf(spell));
+    const effectUuid = linkedSpellEffectUuid(spell);
+    if (!radius || !effectUuid) return null;
+    const save = spell?.system?.defense?.save?.statistic;
+    if (save !== "fortitude" && save !== "reflex" && save !== "will") return null;
+    return { mode: "save", radius, effectUuid, save, applyOn: spec.applyOn ?? DEFAULT_APPLY_ON };
+}
+
+/**
+ * 施法者在当前场景上的 token。
+ *
+ * ⚠ 一个 actor 可能在多个场景各有 token（实测该角色 `getActiveTokens()` 返回 2 个），
+ *   要挑**当前画布上的那个**，否则距离是拿另一个场景的坐标算的。
+ */
+export function casterTokenOf(actor: any): any | null {
+    const 全部 = actor?.getActiveTokens?.() ?? [];
+    const 本场景 = 全部.find((t: any) => t?.scene?.id === (canvas as any)?.scene?.id);
+    return 本场景 ?? 全部[0] ?? null;
+}
+
+/**
+ * 场景**有没有网格**。
+ *
+ * ★ 这是一道**门**，不是一个提示：无网格场景下 pf2e 的距离与 aura 都不正常
+ *   （2026-08-05 实测：十次实验因此全部得出错误结论）。
+ *   无网格时宁可什么都不做并说清楚，也不要算出一个看起来正常的错答案。
+ */
+export function sceneHasGrid(): boolean {
+    return Number((canvas as any)?.scene?.grid?.type ?? 0) > 0;
+}
+
+/**
+ * 施放之后：如果这是登记过的豁免类范围法术，就逐个敌人掷豁免并结算。
+ *
+ * ⚠ 玩家通常**改不动敌人的 actor**（权限跟着执行代码的用户走）。
+ *   那种情况下豁免照掷（掷骰只发聊天消息，不改文档），改不动的**逐个如实报告** ——
+ *   GM 看着结果点两下即可，比"什么都没发生"有用得多，比"静默跳过"诚实得多。
+ */
+export async function resolveAreaAfterCast(actor: any, spell: any): Promise<string | null> {
+    try {
+        const plan = savePlanFor(spell);
+        if (!plan) return null;
+
+        if (!sceneHasGrid()) {
+            return "This scene has no grid — PF2e cannot measure the area reliably, so no saves were rolled.";
+        }
+        const token = casterTokenOf(actor);
+        if (!token) return null;
+
+        const dc = spellDC(spell);
+        if (dc == null) return null;
+
+        const results = await resolveSaveAgainstEnemies(token, plan, dc);
+        return summarize(results);
+    } catch (err) {
+        console.error("player-action-ui-hub | resolveAreaAfterCast 失败", err);
+        return null;
+    }
 }
 
 /** 把结算结果写成一句人话，发到聊天栏。**部分失败要如实说**，不要只报成功的。 */

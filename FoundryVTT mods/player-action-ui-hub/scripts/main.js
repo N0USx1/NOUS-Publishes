@@ -957,23 +957,23 @@ var COLD_START_ORDER = [
   "point-out",
   "interact"
 ];
-function tierOf(a, rankOf) {
+function tierOf(a, rankOf2) {
   if (a.traits.includes("exploration")) return 4;
   if (a.section === "basic") return 0;
   if (a.section === "specialty-basic") return 1;
   const stats = statisticList(a.statistic).filter(Boolean);
   if (stats.length === 0) return 1;
-  return Math.max(...stats.map(rankOf)) >= 1 ? 2 : 3;
+  return Math.max(...stats.map(rankOf2)) >= 1 ? 2 : 3;
 }
 __name(tierOf, "tierOf");
-function rankActions(list, rankOf, frontOf = () => Number.POSITIVE_INFINITY) {
+function rankActions(list, rankOf2, frontOf = () => Number.POSITIVE_INFINITY) {
   return list.filter((a) => !a.traits.includes("downtime")).map((a) => {
     const cold = COLD_START_ORDER.indexOf(a.slug);
     return {
       a,
       front: frontOf(a.slug),
       cold: cold < 0 ? Number.MAX_SAFE_INTEGER : cold,
-      tier: tierOf(a, rankOf)
+      tier: tierOf(a, rankOf2)
     };
   }).sort((x, y) => x.front - y.front || x.cold - y.cold || x.tier - y.tier || x.a.slug.localeCompare(y.a.slug)).map((x) => x.a);
 }
@@ -983,9 +983,9 @@ function collectActions(actor) {
     const coll = game.pf2e?.actions;
     if (!coll) return [];
     const raw = [...coll.values()].filter((a) => !isSkillAction(a));
-    const rankOf = /* @__PURE__ */ __name((slug) => actor?.getStatistic?.(slug)?.rank ?? 0, "rankOf");
+    const rankOf2 = /* @__PURE__ */ __name((slug) => actor?.getStatistic?.(slug)?.rank ?? 0, "rankOf");
     const front = promotedRank(usage());
-    return rankActions(raw, rankOf, front).map((a) => ({
+    return rankActions(raw, rankOf2, front).map((a) => ({
       id: `action:${a.slug}`,
       // ⚠ 必须 localize，理由见 RawAction.name 的注释
       label: game.i18n.localize(a.name),
@@ -1156,6 +1156,37 @@ function collectSpells(actor, entryId) {
 }
 __name(collectSpells, "collectSpells");
 
+// src/spell-data.ts
+function radiusAtRank(spell, rank) {
+  const \u57FA\u7840 = Number(spell?.system?.area?.value);
+  const \u8986\u76D6 = spell?.system?.heightening?.levels;
+  let \u503C = Number.isFinite(\u57FA\u7840) ? \u57FA\u7840 : null;
+  if (\u8986\u76D6 && rank) {
+    const \u547D\u4E2D = Object.keys(\u8986\u76D6).map(Number).filter((n) => Number.isFinite(n) && n <= rank).sort((a, b) => a - b).at(-1);
+    const v = \u547D\u4E2D != null ? Number(\u8986\u76D6[String(\u547D\u4E2D)]?.area?.value) : NaN;
+    if (Number.isFinite(v)) \u503C = v;
+  }
+  return \u503C;
+}
+__name(radiusAtRank, "radiusAtRank");
+function rankOf(spell) {
+  const r = Number(spell?.rank ?? spell?.system?.level?.value);
+  return Number.isFinite(r) ? r : null;
+}
+__name(rankOf, "rankOf");
+function spellDC(spell) {
+  const dc = spell?.spellcasting?.statistic?.dc?.value;
+  return typeof dc === "number" ? dc : null;
+}
+__name(spellDC, "spellDC");
+function linkedSpellEffectUuid(spell) {
+  const desc = String(spell?.system?.description?.value ?? "");
+  const links = [...desc.matchAll(/@UUID\[([^\]]+)\]\{([^}]*)\}/g)];
+  const hit = links.find(([, uuid, label]) => uuid.includes("spell-effects") && /^\s*Spell Effect:/i.test(label));
+  return hit?.[1] ?? null;
+}
+__name(linkedSpellEffectUuid, "linkedSpellEffectUuid");
+
 // src/aura-effects.ts
 var AURA_SPECS = [
   {
@@ -1212,31 +1243,12 @@ function auraSpecFor(slug) {
   return AURA_SPECS.find((s) => s.slug === slug) ?? null;
 }
 __name(auraSpecFor, "auraSpecFor");
-function radiusAtRank(spell, rank) {
-  const \u57FA\u7840 = Number(spell?.system?.area?.value);
-  const \u8986\u76D6 = spell?.system?.heightening?.levels;
-  let \u503C = Number.isFinite(\u57FA\u7840) ? \u57FA\u7840 : null;
-  if (\u8986\u76D6 && rank) {
-    const \u547D\u4E2D = Object.keys(\u8986\u76D6).map(Number).filter((n) => Number.isFinite(n) && n <= rank).sort((a, b) => a - b).at(-1);
-    const v = \u547D\u4E2D != null ? Number(\u8986\u76D6[String(\u547D\u4E2D)]?.area?.value) : NaN;
-    if (Number.isFinite(v)) \u503C = v;
-  }
-  return \u503C;
-}
-__name(radiusAtRank, "radiusAtRank");
-function auraEffectUuid(spell) {
-  const desc = String(spell?.system?.description?.value ?? "");
-  const links = [...desc.matchAll(/@UUID\[([^\]]+)\]\{([^}]*)\}/g)];
-  const hit = links.find(([, uuid, label]) => uuid.includes("spell-effects") && /^\s*Spell Effect:/i.test(label));
-  return hit?.[1] ?? null;
-}
-__name(auraEffectUuid, "auraEffectUuid");
 function auraPlanFor(spell) {
   const spec = auraSpecFor(spell?.slug ?? null);
   if (!spec) return null;
-  const radius = radiusAtRank(spell, spell?.rank ?? spell?.system?.level?.value ?? null);
+  const radius = radiusAtRank(spell, rankOf(spell));
   if (!radius) return null;
-  const effectUuid = auraEffectUuid(spell);
+  const effectUuid = linkedSpellEffectUuid(spell);
   if (!effectUuid) return null;
   const traits = [...spell?.system?.traits?.value ?? []];
   return { spec, radius, traits, effectUuid };
@@ -1321,6 +1333,134 @@ async function applySelfEffectAfterCast(actor, spell) {
 }
 __name(applySelfEffectAfterCast, "applySelfEffectAfterCast");
 
+// src/area-effects.ts
+var DEGREE_NAMES = ["criticalFailure", "failure", "success", "criticalSuccess"];
+var DEFAULT_APPLY_ON = ["criticalFailure", "failure"];
+function enemiesInRange(casterToken, radiusFeet) {
+  try {
+    const out = [];
+    for (const t of canvas?.tokens?.placeables ?? []) {
+      if (!t?.actor || t.id === casterToken?.id) continue;
+      if (!casterToken.actor?.isEnemyOf?.(t.actor)) continue;
+      const d = casterToken.distanceTo?.(t);
+      if (typeof d !== "number" || d > radiusFeet) continue;
+      out.push({ token: t, actor: t.actor, distance: d });
+    }
+    return out;
+  } catch (err) {
+    console.error("player-action-ui-hub | enemiesInRange \u5931\u8D25", err);
+    return [];
+  }
+}
+__name(enemiesInRange, "enemiesInRange");
+async function resolveSaveAgainstEnemies(casterToken, plan, dc) {
+  const results = [];
+  if (plan.mode !== "save" || !plan.save) return results;
+  const applyOn = plan.applyOn ?? DEFAULT_APPLY_ON;
+  const targets = enemiesInRange(casterToken, plan.radius);
+  for (const { actor } of targets) {
+    const name = actor.name ?? "?";
+    try {
+      const stat = actor.saves?.[plan.save];
+      if (!stat) {
+        results.push({ actorName: name, degree: null, applied: false, reason: "\u6CA1\u6709\u8FD9\u9879\u8C41\u514D" });
+        continue;
+      }
+      const roll = await stat.roll({ dc: { value: dc }, skipDialog: true, createMessage: true });
+      const degree = DEGREE_NAMES[roll?.degreeOfSuccess ?? -1] ?? null;
+      if (!degree || !applyOn.includes(degree)) {
+        results.push({ actorName: name, degree, applied: false, reason: "\u8C41\u514D\u6210\u529F" });
+        continue;
+      }
+      if (!actor.canUserModify?.(game.user, "update")) {
+        results.push({ actorName: name, degree, applied: false, reason: "\u65E0\u6743\u9650\u4FEE\u6539\u8BE5\u89D2\u8272" });
+        continue;
+      }
+      const doc = await fromUuid(plan.effectUuid);
+      if (!doc) {
+        results.push({ actorName: name, degree, applied: false, reason: "\u627E\u4E0D\u5230\u6548\u679C" });
+        continue;
+      }
+      const data = doc.toObject();
+      foundry.utils.setProperty(data, "flags.player-action-ui-hub.autoApplied", true);
+      await actor.createEmbeddedDocuments("Item", [data]);
+      results.push({ actorName: name, degree, applied: true, reason: null });
+    } catch (err) {
+      console.error(`player-action-ui-hub | \u5BF9 ${name} \u7ED3\u7B97\u8C41\u514D\u5931\u8D25`, err);
+      results.push({ actorName: name, degree: null, applied: false, reason: "\u51FA\u9519\uFF0C\u8BE6\u89C1\u63A7\u5236\u53F0" });
+    }
+  }
+  return results;
+}
+__name(resolveSaveAgainstEnemies, "resolveSaveAgainstEnemies");
+var SAVE_SPECS = [
+  {
+    slug: "bane",
+    name: "Bane",
+    rule: "Enemies in the area must succeed at a Will save or take a -1 status penalty to attack rolls as long as they are in the area."
+  },
+  {
+    slug: "malediction",
+    name: "Malediction",
+    rule: "Enemies in the area must succeed at a Will save or take a -1 status penalty to AC as long as they're in the area."
+  }
+];
+function saveSpecFor(slug) {
+  if (!slug) return null;
+  return SAVE_SPECS.find((s) => s.slug === slug) ?? null;
+}
+__name(saveSpecFor, "saveSpecFor");
+function savePlanFor(spell) {
+  const spec = saveSpecFor(spell?.slug ?? null);
+  if (!spec) return null;
+  const radius = radiusAtRank(spell, rankOf(spell));
+  const effectUuid = linkedSpellEffectUuid(spell);
+  if (!radius || !effectUuid) return null;
+  const save = spell?.system?.defense?.save?.statistic;
+  if (save !== "fortitude" && save !== "reflex" && save !== "will") return null;
+  return { mode: "save", radius, effectUuid, save, applyOn: spec.applyOn ?? DEFAULT_APPLY_ON };
+}
+__name(savePlanFor, "savePlanFor");
+function casterTokenOf(actor) {
+  const \u5168\u90E8 = actor?.getActiveTokens?.() ?? [];
+  const \u672C\u573A\u666F = \u5168\u90E8.find((t) => t?.scene?.id === canvas?.scene?.id);
+  return \u672C\u573A\u666F ?? \u5168\u90E8[0] ?? null;
+}
+__name(casterTokenOf, "casterTokenOf");
+function sceneHasGrid() {
+  return Number(canvas?.scene?.grid?.type ?? 0) > 0;
+}
+__name(sceneHasGrid, "sceneHasGrid");
+async function resolveAreaAfterCast(actor, spell) {
+  try {
+    const plan = savePlanFor(spell);
+    if (!plan) return null;
+    if (!sceneHasGrid()) {
+      return "This scene has no grid \u2014 PF2e cannot measure the area reliably, so no saves were rolled.";
+    }
+    const token = casterTokenOf(actor);
+    if (!token) return null;
+    const dc = spellDC(spell);
+    if (dc == null) return null;
+    const results = await resolveSaveAgainstEnemies(token, plan, dc);
+    return summarize(results);
+  } catch (err) {
+    console.error("player-action-ui-hub | resolveAreaAfterCast \u5931\u8D25", err);
+    return null;
+  }
+}
+__name(resolveAreaAfterCast, "resolveAreaAfterCast");
+function summarize(results) {
+  if (!results.length) return "No enemies in range.";
+  const hit = results.filter((r) => r.applied).map((r) => r.actorName);
+  const missed = results.filter((r) => !r.applied);
+  const parts = [];
+  if (hit.length) parts.push(`Affected: ${hit.join(", ")}`);
+  for (const r of missed) parts.push(`${r.actorName}: ${r.reason}`);
+  return parts.join(" \xB7 ");
+}
+__name(summarize, "summarize");
+
 // src/executor.ts
 function findStrike(actor, strikeId) {
   return strikesOf(actor).find((s, i) => strikeSectorId(s, i) === strikeId) ?? null;
@@ -1393,6 +1533,13 @@ async function castSpell(actor, entryId, spellId) {
     await entry.cast(spell, { rank: spell.rank });
     const applied = await applySelfEffectAfterCast(actor, spell);
     if (applied) ui.notifications.info(`${applied} applied.`);
+    const \u7ED3\u7B97 = await resolveAreaAfterCast(actor, spell);
+    if (\u7ED3\u7B97) {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<p><strong>${spell.name}</strong></p><p>${\u7ED3\u7B97}</p>`
+      });
+    }
   } catch (err) {
     console.error("player-action-ui-hub | castSpell \u5931\u8D25", err);
     ui.notifications.error("Casting failed \u2014 see the console for details.");
@@ -1749,7 +1896,7 @@ Hooks.once("ready", () => {
      * ⚠ 暴露的是**真实执行路径上的那几个**，不是给测试另写一份 ——
      *   另写一份就是又造一个会腐坏的副本，测的还是副本不是产品。
      */
-    _test: { auraPlanFor, buildAuraEffect }
+    _test: { auraPlanFor, buildAuraEffect, savePlanFor, sceneHasGrid, resolveAreaAfterCast }
   };
   function isWheelSummon(ev) {
     return ev.button === 0 && ev.ctrlKey && ev.target?.tagName === "CANVAS";

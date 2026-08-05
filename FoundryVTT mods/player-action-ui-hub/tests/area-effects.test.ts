@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { enemiesInRange, summarize, DEGREE_NAMES, DEFAULT_APPLY_ON,
+         SAVE_SPECS, saveSpecFor, savePlanFor,
          type SaveOutcome } from "../src/area-effects";
+import { auraSpecFor } from "../src/aura-effects";
 
 /*
  * 断言对着 2026-08-05 的实测：
@@ -106,5 +108,94 @@ describe("summarize", () => {
         const s = summarize([r("兽人", false, "豁免成功")]);
         expect(s).not.toContain("Affected");
         expect(s).toContain("兽人: 豁免成功");
+    });
+});
+
+/* ────────────────────────────────────────────────────────────
+ * 路径 B 的登记表（2026-08-05 接线）
+ * ──────────────────────────────────────────────────────────── */
+
+/**
+ * ⚠ `...over` 必须在 `system` **之前**展开，否则它会把合并好的 system 整个盖掉，
+ *   夹具就只剩下调用方写的那一两个字段 —— 断言看着通过，其实测的是别的东西。
+ */
+function 减益法术(over: Record<string, any> = {}) {
+    return {
+        slug: "bane",
+        rank: 1,
+        ...over,
+        system: {
+            area: { type: "emanation", value: 10 },
+            defense: { save: { basic: false, statistic: "will" } },
+            description: {
+                value: '@UUID[Compendium.pf2e.spell-effects.Item.UTLp7omqsiC36bso]{Spell Effect: Bane}',
+            },
+            ...over.system,
+        },
+    };
+}
+
+describe("SAVE_SPECS：只登记推不出来的东西", () => {
+    it("不带 save / radius / effectUuid —— 全部从法术读", () => {
+        for (const s of SAVE_SPECS) {
+            expect(s).not.toHaveProperty("save");
+            expect(s).not.toHaveProperty("radius");
+            expect(s).not.toHaveProperty("effectUuid");
+        }
+    });
+
+    it("★ Roar of the Dragon 不在表里", () => {
+        // 它的 Spell Effect 里只有 FlatModifier:diplomacy —— 那是**施法者自己**对龙的加值，
+        // 套给敌人正好反了。敌人那头是按四档给 frightened（condition 不是 effect），
+        // 还带一句"GM 判定谁算与龙有渊源"，目标集合不可推导。
+        expect(saveSpecFor("roar-of-the-dragon")).toBeNull();
+    });
+
+    it("aura 表里的法术不许同时出现在这里", () => {
+        for (const s of SAVE_SPECS) expect(auraSpecFor(s.slug)).toBeNull();
+    });
+});
+
+describe("savePlanFor", () => {
+    it("豁免项来自 system.defense.save.statistic，不是写死的 Will", () => {
+        expect(savePlanFor(减益法术())!.save).toBe("will");
+        const 改 = 减益法术({ system: { defense: { save: { statistic: "reflex" } } } });
+        expect(savePlanFor(改)!.save).toBe("reflex");
+    });
+
+    it("默认只有失败与大失败算中招", () => {
+        expect(savePlanFor(减益法术())!.applyOn).toEqual(["criticalFailure", "failure"]);
+    });
+
+    it("半径与效果 UUID 来自法术", () => {
+        const p = savePlanFor(减益法术())!;
+        expect(p.radius).toBe(10);
+        expect(p.effectUuid).toContain("spell-effects");
+    });
+
+    it("没登记的法术不接管", () => {
+        expect(savePlanFor(减益法术({ slug: "fireball" }))).toBeNull();
+    });
+
+    it("豁免项读不出来 → null，不猜一个 Will", () => {
+        expect(savePlanFor(减益法术({ system: { defense: null } }))).toBeNull();
+    });
+
+    it("没有自带效果 → null", () => {
+        expect(savePlanFor(减益法术({ system: { description: { value: "" } } }))).toBeNull();
+    });
+});
+
+describe("summarize：部分失败要逐个说清楚", () => {
+    it("套上的和没套上的都报", () => {
+        const 话 = summarize([
+            { actorName: "Goblin", degree: "failure", applied: true, reason: null },
+            { actorName: "Orc", degree: "success", applied: false, reason: "豁免成功" },
+            { actorName: "Ogre", degree: "failure", applied: false, reason: "无权限修改该角色" },
+        ]);
+        expect(话).toContain("Goblin");
+        expect(话).toContain("Orc: 豁免成功");
+        // ★ 没权限这条必须出现 —— 玩家改不动敌人时，GM 要看得见并接手
+        expect(话).toContain("Ogre: 无权限修改该角色");
     });
 });

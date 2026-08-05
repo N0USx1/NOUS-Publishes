@@ -251,4 +251,52 @@ check("★ pf2e 收进了 actor.auras（收进去才会扩散）", 落地.进了
       `true，实际 auras: ${JSON.stringify(落地.auras键)}`);
 check("测试没在世界里留垃圾", 落地.删干净了, true);
 
+/* ── 9. 豁免类范围减益（路径 B）──────────────────
+ *
+ * ★ 这里最要紧的一条是 **Roar of the Dragon 的排除证据**：
+ *   我们排除它，理由是"它那条 Spell Effect 是**施法者自己**的交涉加值，不是敌人减益"。
+ *   那是一个关于**别人的数据**的判断 —— 万一 pf2e 以后改了，我们的排除就没道理了，
+ *   而没有断言的话没人会发现。所以把证据本身钉住。
+ */
+section("豁免类范围减益");
+const 减益 = await evaluate(`
+${PRELUDE}
+const 取法术 = async (slug) => {
+  for (const p of game.packs.filter(p => p.metadata.type === "Item")) {
+    const hit = (await p.getIndex({ fields: ["type","system.slug"] }))
+      .find(e => e.type === "spell" && e.system?.slug === slug);
+    if (hit) return await p.getDocument(hit._id);
+  }
+  return null;
+};
+const 出 = {};
+for (const slug of ["bane", "malediction"]) {
+  const sp = await 取法术(slug);
+  const plan = sp ? pauih._test.savePlanFor(sp) : null;
+  出[slug] = { 找得到: !!sp, plan: plan ? { save: plan.save, radius: plan.radius } : null };
+}
+// Roar：确认它的效果确实是施法者的加值
+const roar = await 取法术("roar-of-the-dragon");
+出.roar = { 我们不接管: pauih._test.savePlanFor(roar) === null };
+const ef = await fromUuid("Compendium.pf2e.spell-effects.Item.0s6YaL3IjqECmjab");
+出.roar.效果规则 = (ef?.system?.rules ?? []).map(r => r.key + ":" + (r.selector ?? ""));
+出.无网格时挡住了 = !pauih._test.sceneHasGrid()
+  ? String(await pauih._test.resolveAreaAfterCast(
+      game.actors.filter(a => a.type === "character")[0], roar ? await 取法术("bane") : null) ?? "")
+  : "本场景有网格，这条不适用";
+出.当前场景有网格 = pauih._test.sceneHasGrid();
+return 出;
+`);
+check("bane 算得出 plan", 减益.bane?.plan, v => !!v);
+check("bane 的豁免项从法术读出来是 will", 减益.bane?.plan?.save, "will");
+check("malediction 算得出 plan", 减益.malediction?.plan, v => !!v);
+check("★ Roar of the Dragon 不接管", 减益.roar?.我们不接管, true);
+check("★ 排除依据仍成立：它的效果是施法者的交涉加值，不是敌人减益",
+      减益.roar?.效果规则, v => Array.isArray(v) && v.length === 1 && v[0].includes("diplomacy"),
+      "只有 FlatModifier:diplomacy");
+if (!减益.当前场景有网格) {
+    check("★ 无网格场景被挡住而不是算出个错答案", 减益.无网格时挡住了,
+          v => String(v).includes("no grid"), "返回 no grid 的说明");
+}
+
 process.exit(report());
