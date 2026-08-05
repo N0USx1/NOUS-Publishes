@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { pickClassItems, type ClassItemLike } from "../../src/collectors/class-abilities";
+import { pickClassItems, iconFromChain, type ClassItemLike } from "../../src/collectors/class-abilities";
+
+/** 按 id 取该条目沿链解析出来的图标 */
+const collectIconFor = (items: ClassItemLike[], id: string) =>
+    iconFromChain(items.find(i => i.id === id)!, (x) => items.find(i => i.id === x));
 
 /*
  * 断言全部对着 2026-08-05 的游戏内实测与 compendium 实读：
@@ -112,6 +116,52 @@ describe("★ 沿 grantedBy 链回溯归属", () => {
         ];
         expect(() => pickClassItems(items, "magus", resolver(items))).not.toThrow();
         expect(pickClassItems(items, "magus", resolver(items))).toEqual([]);
+    });
+
+    /*
+     * ★★ 图标也走同一条链（2026-08-05 Nous 质疑后查出来的）。
+     *   pf2e 的设计：**能执行的动作条目一律用消耗图标，真图标挂在发出它的 feat 上**。
+     *   pack 索引实证：actionspf2e 574 条专属图标 **0** 条，
+     *   classfeatures 880 条里 **874 条**有专属图标。
+     *   所以图标不用映射，顺着 grantedBy 取就行。
+     */
+    it("★ 自己是通用消耗图标时，取发出它的那一环的专属图标", () => {
+        const items = [
+            item({ id: "act", name: "Arcane Cascade", traits: ["magus"],
+                   img: "systems/pf2e/icons/actions/OneAction.webp", grantedById: "feat" }),
+            item({ id: "feat", name: "Arcane Cascade", type: "feat", traits: ["magus"],
+                   category: "classfeature", actionType: "passive",
+                   img: "systems/pf2e/icons/features/classes/arcane-cascade.webp" }),
+        ];
+        expect(pickClassItems(items, "magus", resolver(items))).toHaveLength(1);
+        // 采集结果里那一条应当拿到 feat 上的专属图标，而不是自己的消耗图标
+        const chain = collectIconFor(items, "act");
+        expect(chain).toBe("systems/pf2e/icons/features/classes/arcane-cascade.webp");
+    });
+
+    it("自己就有专属图标时不去上一环拿", () => {
+        const items = [
+            item({ id: "act", img: "icons/magic/movement/trail.webp", grantedById: "feat" }),
+            item({ id: "feat", img: "systems/pf2e/icons/features/classes/other.webp", actionType: "passive" }),
+        ];
+        expect(collectIconFor(items, "act")).toBe("icons/magic/movement/trail.webp");
+    });
+
+    it("整条链都是通用图标时返回 undefined（退回文字，不硬塞）", () => {
+        const items = [
+            item({ id: "act", img: "systems/pf2e/icons/actions/OneAction.webp", grantedById: "feat" }),
+            item({ id: "feat", img: "systems/pf2e/icons/actions/Passive.webp", actionType: "passive" }),
+        ];
+        expect(collectIconFor(items, "act")).toBe(undefined);
+    });
+
+    it("★ 图标回溯同样要防成环", () => {
+        const items = [
+            item({ id: "a", img: "systems/pf2e/icons/actions/OneAction.webp", grantedById: "b" }),
+            item({ id: "b", img: "systems/pf2e/icons/actions/OneAction.webp", grantedById: "a", actionType: "passive" }),
+        ];
+        expect(() => collectIconFor(items, "a")).not.toThrow();
+        expect(collectIconFor(items, "a")).toBe(undefined);
     });
 
     it("被动条目即使归属本职业也不收（回溯不改变被动过滤）", () => {

@@ -1003,13 +1003,6 @@ function collectActions(actor) {
 __name(collectActions, "collectActions");
 
 // src/collectors/class-abilities.ts
-var COST_ICONS = {
-  "1": "icons/svg/upgrade.svg",
-  "2": "icons/svg/up.svg",
-  "3": "icons/svg/explosion.svg",
-  reaction: "icons/svg/combat.svg",
-  free: "icons/svg/circle.svg"
-};
 function belongsToClass(item, classSlug, resolve) {
   const seen = /* @__PURE__ */ new Set();
   let cur = item;
@@ -1021,6 +1014,17 @@ function belongsToClass(item, classSlug, resolve) {
   return false;
 }
 __name(belongsToClass, "belongsToClass");
+function iconFromChain(item, resolve) {
+  const seen = /* @__PURE__ */ new Set();
+  let cur = item;
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    if (!isGenericIcon(cur.img)) return cur.img;
+    cur = cur.grantedById ? resolve(cur.grantedById) : void 0;
+  }
+  return void 0;
+}
+__name(iconFromChain, "iconFromChain");
 function pickClassItems(items, classSlug, resolve) {
   if (!classSlug) return [];
   return items.filter((i) => {
@@ -1055,16 +1059,8 @@ function collectClassAbilities(actor) {
       return {
         id: `class:${i.id}`,
         label: i.name,
-        /*
-         * ⚠ 实测 actor 自带的动作条目**多数是通用消耗图标**
-         *   （`systems/pf2e/icons/actions/OneAction.webp` 之流），一圈全长一样。
-         *
-         * ★ 职业能力**不做逐条映射** —— 29 个职业上千个条目，按名字配图标
-         *   既做不完也必然在多职业/原型/模组内容上出错。
-         *   通用图标的一律按消耗给一个"这是几个动作"的记号图，
-         *   至少比一圈完全相同的图标有区分度，名字仍由中心毂显示。
-         */
-        img: isGenericIcon(i.img) ? COST_ICONS[String(cost ?? "")] ?? void 0 : i.img,
+        // 自己是通用消耗图标时，沿 grantedBy 链去上一环取专属图标（见 iconFromChain）
+        img: iconFromChain(i, resolve),
         cost,
         // ★ 反应在扇区上直接标出来（Nous 2026-08-05 定"用记号区分"）：
         //   它与主动动作混在同一圈里，不标的话玩家会以为它花掉一个动作。
