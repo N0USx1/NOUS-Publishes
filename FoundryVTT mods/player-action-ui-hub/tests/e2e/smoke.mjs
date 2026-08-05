@@ -15,6 +15,18 @@ import { evaluate, check, section, report, PRELUDE } from "./cdp.mjs";
 
 const 期望分类 = ["Strikes", "Actions", "Skills", "Class", "Spells"];
 
+/* ── 0. 清掉上一次被中断留下的东西 ──────────────
+ *
+ * ⚠ 造临时角色的那几组用 `finally` 删，但**进程被强杀时 finally 不会跑**。
+ *   残角色会一直留在用户的世界里；卡片窗口还会挡住下一次运行的脚本
+ *   （2026-08-05 实撞：一个 ikon 卡片开着，整套 e2e 在第 3 组超时 240 秒）。
+ */
+await evaluate(`
+for (const a of game.actors.filter(a => a.name.startsWith("PAUIH temp"))) { await a.delete(); }
+for (const app of foundry.applications?.instances?.values?.() ?? []) { try { app.close(); } catch {} }
+return 1;
+`);
+
 /* ── 1. 模组还活着吗（BOM 那类故障的守卫）────────── */
 section("模组加载");
 const 模组 = await evaluate(`
@@ -229,7 +241,7 @@ if (!spell) return { 没法术: true };
 const plan = pauih._test.auraPlanFor(spell);
 if (!plan) return { 算不出plan: true };
 const data = pauih._test.buildAuraEffect(plan, actor.level);
-const [做出来的] = await actor.createEmbeddedDocuments("Item", [data]);
+const [做出来的] = await actor.createEmbeddedDocuments("Item", [data], { render: false });
 const 活的 = actor.items.get(做出来的.id);
 const 规则 = 活的?.system?.rules?.[0] ?? null;
 const out = {
@@ -320,7 +332,7 @@ out.扇区id样式 = 徒手[0]?.id ?? null;
 // ② 造一个武僧，走完"点连击 → 出第一步盘面"
 let 武僧 = null;
 try {
-  武僧 = await Actor.create({ name: "PAUIH temp monk", type: "character" });
+  武僧 = await Actor.create({ name: "PAUIH temp monk", type: "character" }, { render: false });
   let feat = null;
   for (const p of game.packs.filter(p => p.metadata.type === "Item")) {
     const hit = (await p.getIndex({ fields: ["type","system.slug"] }))
@@ -329,7 +341,7 @@ try {
   }
   out.找得到连击feat = !!feat;
   if (feat) {
-    const [装上] = await 武僧.createEmbeddedDocuments("Item", [feat.toObject()]);
+    const [装上] = await 武僧.createEmbeddedDocuments("Item", [feat.toObject()], { render: false });
     out.slug认得出 = !!pauih._test.macroFor(装上.slug);
     const 一 = pauih._test.levelForStep(武僧, pauih._test.macroFor(装上.slug), 0, { picks: [], variantIndex: 0 });
     out.第一步 = 一 ? { 标题: 一.title, 条数: 一.sectors.length, 有翻选条: !!一.variant } : null;
@@ -398,10 +410,10 @@ out.圣像带exemplar = 圣像.some(i => i.traits.includes("exemplar"));
 // ③ 造个典范，装两个圣像，看神火那条出不出来
 let 典范 = null;
 try {
-  典范 = await Actor.create({ name: "PAUIH temp exemplar", type: "character" });
+  典范 = await Actor.create({ name: "PAUIH temp exemplar", type: "character" }, { render: false });
   for (const i of 圣像) {
     const d = await pack.getDocument(i.id);
-    await 典范.createEmbeddedDocuments("Item", [d.toObject()]);
+    await 典范.createEmbeddedDocuments("Item", [d.toObject()], { render: false });
   }
   const st = pauih._test.readClassState(典范);
   const 神火 = st.toggles.find(t => t.key === "toggle:divine-spark");
