@@ -278,6 +278,18 @@
 }
 .pauih-reaction.full { fill: var(--color-text-primary, #efe6d8); }   /* 还有：亮 */
 
+/* 职业状态区（设计定档 §7）——毂里显示 panache / 专注余量这类"甲类状态"。
+   ★ 只在有内容时出现；样式沿用毂内说明文字的调子，不另造一套。 */
+.pauih-class-state {
+    font-size: 5.6px;
+    letter-spacing: 0.2px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+    fill: var(--color-text-subtle, #9f8475);
+}
+
 .pauih-undo {
     font-size: 10px;
     font-weight: bold;

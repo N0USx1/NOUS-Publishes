@@ -148,6 +148,13 @@ export class WheelApp extends AppV2 {
     /** 点了撤回时调用，由外部注入（真正的记账退还在外面做）。 */
     onUndo?: () => void;
 
+    /**
+     * 取职业状态行的回调，由外部注入。返回空数组 = 这一格不出现。
+     * ⚠ 与 economy 不同，它**不受"在不在战斗中"限制** ——
+     *   专注点余量在战斗外一样有意义。
+     */
+    classState?: () => string[];
+
     /** 无操作自动收起的计时器 */
     #idleTimer?: ReturnType<typeof setTimeout>;
 
@@ -457,7 +464,30 @@ export class WheelApp extends AppV2 {
             line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
         }
 
+        /*
+         * 职业状态区（设计定档 §7）——**只在有内容时出现**。
+         *
+         * ★ 这是"甲类空白"的落点：panache 有没有、专注还剩几点这类东西
+         *   在 pf2e 里不是 item，列表型 HUD 结构上做不了，而毂天生是块屏。
+         * ⚠ 没内容时一行都不画，且**不占位**：下面的动作经济行位置固定，
+         *   所以状态行往上排，有几行画几行。
+         */
+        const state = this.classState?.() ?? [];
+        state.forEach((line, i) => {
+            // 从经济行往上垒，避免有无状态时经济行跳位
+            line_(line, CY + 20 + (i - state.length) * 6.5);
+        });
+
         this.#paintEconomy(g);
+
+        function line_(text: string, y: number): void {
+            const t = document.createElementNS(SVG_NS, "text");
+            t.setAttribute("x", String(CX));
+            t.setAttribute("y", String(y));
+            t.setAttribute("class", "pauih-class-state");
+            t.textContent = text;
+            g.appendChild(t);
+        }
     }
 
     /**

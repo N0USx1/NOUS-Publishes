@@ -244,6 +244,12 @@ var WheelApp = class extends AppV2 {
   economy;
   /** 点了撤回时调用，由外部注入（真正的记账退还在外面做）。 */
   onUndo;
+  /**
+   * 取职业状态行的回调，由外部注入。返回空数组 = 这一格不出现。
+   * ⚠ 与 economy 不同，它**不受"在不在战斗中"限制** ——
+   *   专注点余量在战斗外一样有意义。
+   */
+  classState;
   /** 无操作自动收起的计时器 */
   #idleTimer;
   /** 换一层内容并重绘（钻取与双向绑定都走这里） */
@@ -460,7 +466,20 @@ var WheelApp = class extends AppV2 {
       const v = this.level.variant;
       line(v.labels[v.index] ?? "", CY + 16, "pauih-variant");
     }
+    const state = this.classState?.() ?? [];
+    state.forEach((line2, i) => {
+      line_(line2, CY + 20 + (i - state.length) * 6.5);
+    });
     this.#paintEconomy(g);
+    function line_(text, y) {
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", String(CX));
+      t.setAttribute("y", String(y));
+      t.setAttribute("class", "pauih-class-state");
+      t.textContent = text;
+      g.appendChild(t);
+    }
+    __name(line_, "line_");
   }
   /**
    * 毂底的动作经济行：三个菱形 + 一个红色 « 撤回（Nous 2026-08-05 定的形态）。
@@ -1027,6 +1046,44 @@ async function useAction(actor, slug, event) {
 }
 __name(useAction, "useAction");
 
+// src/class-state.ts
+var MAX_STATE_LINES = 2;
+function classStateLines(input) {
+  const lines = [];
+  if (input.focus && input.focus.max > 0) {
+    lines.push(`\u2726 Focus ${input.focus.value}/${input.focus.max}`);
+  }
+  for (const t of input.toggles) {
+    lines.push(`${t.label} \u2726 ${t.enabled ? "on" : "off"}`);
+  }
+  return lines.slice(0, MAX_STATE_LINES);
+}
+__name(classStateLines, "classStateLines");
+function readClassState(actor) {
+  try {
+    const a = actor;
+    const classSlug = a?.class?.slug ?? null;
+    const focus = a?.system?.resources?.focus ?? null;
+    const toggles = [];
+    for (const [, options] of Object.entries(a?.synthetics?.toggles ?? {})) {
+      for (const [, opt] of Object.entries(options)) {
+        const item = opt?.itemId ? a?.items?.get?.(opt.itemId) : null;
+        const traits = item?.system?.traits?.value ?? [];
+        if (!classSlug || !traits.includes(classSlug)) continue;
+        toggles.push({
+          label: String(opt?.label ?? opt?.option ?? "?"),
+          enabled: !!opt?.enabled
+        });
+      }
+    }
+    return { focus: focus && focus.max > 0 ? { value: focus.value, max: focus.max } : null, toggles };
+  } catch (err) {
+    console.error("player-action-ui-hub | readClassState \u5931\u8D25", err);
+    return { focus: null, toggles: [] };
+  }
+}
+__name(readClassState, "readClassState");
+
 // src/main.ts
 var MODULE_ID2 = "player-action-ui-hub";
 var lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
@@ -1062,14 +1119,27 @@ function openAt(x, y) {
   }
   openWheel?.close();
   openWheelActor = actor;
+  const counts = {
+    strikes: collectStrikes(actor).length,
+    actions: collectActions(actor).length,
+    class: collectClassAbilities(actor).length,
+    spells: collectSpellEntries(actor).length
+  };
+  const cat = /* @__PURE__ */ __name((id, label) => ({
+    id,
+    label: `${label} (${counts[id]})`,
+    cost: null,
+    state: counts[id] > 0 ? "normal" : "gated",
+    reason: counts[id] > 0 ? void 0 : "Nothing available in this category right now."
+  }), "cat");
   const level = {
     title: actor.name,
     canGoBack: false,
     sectors: [
-      { id: "strikes", label: "Strikes", cost: null, state: "normal" },
-      { id: "actions", label: "Actions", cost: null, state: "normal" },
-      { id: "class", label: "Class", cost: null, state: "normal" },
-      { id: "spells", label: "Spells", cost: null, state: "normal" }
+      cat("strikes", "Strikes"),
+      cat("actions", "Actions"),
+      cat("class", "Class"),
+      cat("spells", "Spells")
     ]
   };
   openWheel = new WheelApp(level, (s, ev) => {
@@ -1198,6 +1268,7 @@ function openAt(x, y) {
       reactionsLeft: reactionsLeft(actor.id, round)
     };
   };
+  openWheel.classState = () => classStateLines(readClassState(actor));
   openWheel.onUndo = () => {
     const round = currentRound(actor);
     if (round !== null) undoLast(actor.id, round);

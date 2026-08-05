@@ -1,14 +1,15 @@
 import type { ActorPF2e, ItemPF2e } from "foundry-pf2e";
 import { WheelApp } from "./wheel-app";
 import { resolveActor } from "./target";
-import { collectStrikes } from "./collectors/strikes";
-import { collectActions } from "./collectors/actions";
-import { collectClassAbilities, className } from "./collectors/class-abilities";
-import { collectSpellEntries, collectSpells } from "./collectors/spells";
+import {
+    collectStrikes, collectActions, collectClassAbilities, className,
+    collectSpellEntries, collectSpells,
+} from "./collectors";
 import { rollStrike, execAuxiliary, useAction, castSpell } from "./executor";
 import { registerUsageSetting, bump as bumpUsage } from "./usage";
+import { classStateLines, readClassState } from "./class-state";
 import * as economy from "./economy";
-import type { WheelLevel } from "./types";
+import type { WheelLevel, SectorData } from "./types";
 
 const MODULE_ID = "player-action-ui-hub";
 
@@ -72,14 +73,37 @@ function openAt(x: number, y: number): void {
     }
     openWheel?.close();
     openWheelActor = actor;
+    /*
+     * 分类层带计数与空分类灰显（设计定档 §7）。
+     *
+     * ★ **同一份采集结果既供计数也供下钻** —— §7 明确要求，不要为计数单写一套轻量逻辑。
+     *   两套逻辑必然分叉（executor 的 findStrike 当年就是这么错的）。
+     *   代价是呼出时要跑四个采集器；实测 70 条动作那次也在毫秒级，可以接受。
+     *
+     * ⚠ 空分类**灰显但仍可点** —— 三态守则："提示不是锁"。
+     *   点了给一句说明，比一个点不动的死格子强：玩家至少知道自己没点错。
+     */
+    const counts = {
+        strikes: collectStrikes(actor).length,
+        actions: collectActions(actor).length,
+        class: collectClassAbilities(actor).length,
+        spells: collectSpellEntries(actor).length,
+    };
+    const cat = (id: keyof typeof counts, label: string): SectorData => ({
+        id,
+        label: `${label} (${counts[id]})`,
+        cost: null,
+        state: counts[id] > 0 ? "normal" : "gated",
+        reason: counts[id] > 0 ? undefined : "Nothing available in this category right now.",
+    });
     const level: WheelLevel = {
         title: actor.name,
         canGoBack: false,
         sectors: [
-            { id: "strikes", label: "Strikes", cost: null, state: "normal" },
-            { id: "actions", label: "Actions", cost: null, state: "normal" },
-            { id: "class",   label: "Class",   cost: null, state: "normal" },
-            { id: "spells",  label: "Spells",  cost: null, state: "normal" },
+            cat("strikes", "Strikes"),
+            cat("actions", "Actions"),
+            cat("class", "Class"),
+            cat("spells", "Spells"),
         ],
     };
     openWheel = new WheelApp(level, (s, ev) => {
@@ -247,6 +271,7 @@ function openAt(x: number, y: number): void {
             reactionsLeft: economy.reactionsLeft(actor.id, round),
         };
     };
+    openWheel.classState = () => classStateLines(readClassState(actor));
     openWheel.onUndo = () => {
         const round = currentRound(actor);
         if (round !== null) economy.undoLast(actor.id, round);
