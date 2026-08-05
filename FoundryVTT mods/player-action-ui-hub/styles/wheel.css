@@ -163,9 +163,12 @@
     pointer-events: none;
 }
 
+/* ★ 毂里这几档字号 2026-08-05 整体上调（Nous：「中心解释区的字体都可以放大一点点」）。
+   毂半径 68，原来的 9/6/5.2 相对可用空间偏小，读着费劲。
+   ⚠ 三档要**一起**调，否则主次关系会乱 —— 标题、补充信息、原因之间的比例才是层次。 */
 .pauih-hub-title {
     fill: var(--color-text-primary, #efe6d8);
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.5px;
     text-anchor: middle;
     dominant-baseline: middle;
@@ -177,7 +180,7 @@
    断行由 wheel-app.ts 的 wrapText() 做，这里只管样式。 */
 .pauih-hub-reason {
     fill: var(--color-text-subtle, #9f8475);
-    font-size: 5.2px;
+    font-size: 6.4px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -187,7 +190,7 @@
    比原因文字亮一档 —— 它是"想知道才看"的数值，不是警告。 */
 .pauih-hub-detail {
     fill: var(--color-text-primary, #efe6d8);
-    font-size: 6px;
+    font-size: 7.5px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -296,7 +299,7 @@
 /* 职业状态区（设计定档 §7）——毂里显示 panache / 专注余量这类"甲类状态"。
    ★ 只在有内容时出现；样式沿用毂内说明文字的调子，不另造一套。 */
 .pauih-class-state {
-    font-size: 5.6px;
+    font-size: 6.4px;
     letter-spacing: 0.2px;
     text-anchor: middle;
     dominant-baseline: middle;

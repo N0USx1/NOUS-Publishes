@@ -1,5 +1,6 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import type { SectorData } from "../types";
+import { SPELL_ENTRY_ICONS, SPELL_ENTRY_DEFAULT } from "../icons";
 
 /**
  * 施法条目的最小形状。
@@ -86,6 +87,8 @@ export function collectSpellEntries(actor: ActorPF2e | null): SectorData[] {
         return usableEntries(entries).map((e): SectorData => ({
             id: `spellentry:${e.id}`,
             label: e.name,
+            // 条目自带的是 pf2e 的默认占位图（三个条目长一样），换成按类别区分的
+            img: SPELL_ENTRY_ICONS[e.category ?? ""] ?? SPELL_ENTRY_DEFAULT,
             cost: null,
             state: "normal",
             badge: e.isFocusPool ? focusBadge(pool) : undefined,

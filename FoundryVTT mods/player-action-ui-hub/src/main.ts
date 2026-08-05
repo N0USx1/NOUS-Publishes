@@ -8,6 +8,7 @@ import {
 import { rollStrike, execAuxiliary, useAction, castSpell, rollSkill } from "./executor";
 import { registerUsageSetting, bump as bumpUsage } from "./usage";
 import { classStateLines, readClassState } from "./class-state";
+import { CATEGORY_ICONS } from "./icons";
 import * as economy from "./economy";
 import type { WheelLevel, SectorData } from "./types";
 
@@ -92,7 +93,12 @@ function openAt(x: number, y: number): void {
     };
     const cat = (id: keyof typeof counts, label: string): SectorData => ({
         id,
-        label: `${label} (${counts[id]})`,
+        label,
+        // 分类层用单色 SVG，与内容层的彩色贴图区分开 —— 一眼看出这是导航层
+        img: CATEGORY_ICONS[id],
+        // ★ 计数移到 detail：印在扇区上会挤（`Actions (25)` 比图标宽得多），
+        //   而它是"想知道才看"的参考数，悬停时在毂里给就够了。
+        detail: `${counts[id]} available`,
         cost: null,
         state: counts[id] > 0 ? "normal" : "gated",
         reason: counts[id] > 0 ? undefined : "Nothing available in this category right now.",

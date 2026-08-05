@@ -62,25 +62,13 @@ function rankName(rank: number): string {
     return ["Untrained", "Trained", "Expert", "Master", "Legendary"][rank] ?? "Untrained";
 }
 
-/**
- * 补图标 —— 只补 pf2e 没给的那几个。
- *
- * ★ 实测 45 个技能动作里 **41 个本来就有专属图标**，缺的只有这 4 个知识类。
- *   它们的名字又恰好最长（`Recall Knowledge` / `Identify Magic`），
- *   退回文字就会压出扇区（Nous 2026-08-05 截图：`Occultism Chec…` 溢出）。
- *
- * ⚠ 用的是 **Foundry 自带图标库**（`icons/**`，game-icons.net 的 CC BY 3.0 素材，
- *   随 Foundry 分发）—— 不引入外部资源、不增加分发体积、授权干净。
- */
-const ICON_FALLBACK: Record<string, string> = {
-    "recall-knowledge": "icons/skills/trades/academics-book-study-runes.webp",
-    "identify-magic": "icons/magic/symbols/question-stone-yellow.webp",
-    "identify-alchemy": "icons/skills/trades/academics-investigation-puzzles.webp",
-    "learn-a-spell": "icons/skills/trades/academics-study-reading-book.webp",
-};
+/** 图标补位表集中在 `../icons`，这里只管取。 */
+import { SKILL_ICONS, LORE_ICON, SKILL_ACTION_ICONS, CHECK_ICON, iconFor } from "../icons";
 
-/** 裸检定那一格的图标。每个技能共用同一个 —— 它表达的是"掷这个技能"这件事。 */
-const CHECK_ICON = "icons/skills/trades/academics-scribe-quill-gray.webp";
+/** 技能图标。学识类（`*-lore`）可以有任意多条，共用一个。 */
+function skillIcon(slug: string): string {
+    return SKILL_ICONS[slug] ?? (slug.endsWith("-lore") ? LORE_ICON : LORE_ICON);
+}
 
 /** 第一层：角色的技能列表。 */
 export function collectSkills(actor: ActorPF2e | null): SectorData[] {
@@ -110,6 +98,8 @@ export function collectSkills(actor: ActorPF2e | null): SectorData[] {
         return rankSkills(entries).map((s): SectorData => ({
             id: `skill:${s.slug}`,
             label: s.label,
+            // ⚠ 技能是 Statistic 不是 item，**没有 img 字段**，只能全部自己配
+            img: skillIcon(s.slug),
             cost: null,
             state: "normal",
             // ★ 修正值走 detail（悬停时在毂里显示），**不印在扇区上** ——
@@ -136,13 +126,18 @@ export function collectSkillActions(actor: ActorPF2e | null, skillSlug: string):
         if (stat) {
             out.push({
                 id: `skillcheck:${skillSlug}`,
-                // ⚠ 只叫 "Check" 而不是 "<技能> Check"：**层标题已经是技能名了**，
-                //   重复一遍既冗余又长到压出扇区（`Occultism Check` 实测溢出）。
-                label: "Check",
+                /*
+                 * ★ 名字要完整（`Acrobatics Check`），不缩成 `Check`。
+                 *   一度缩过，理由是"层标题已经是技能名、且长名字压出扇区"——
+                 *   但**扇区上走的是图标**（见下面的 img），label 只在毂里出现，
+                 *   长度根本不受限。而毂里只写 `Check` 是没信息量的
+                 *   （Nous 2026-08-05：主标题该是 `Acrobatics Check`，`+13` 才是小字）。
+                 */
+                label: `${stat.label} Check`,
                 img: CHECK_ICON,
                 cost: null,
                 state: "normal",
-                detail: `${stat.label} ${stat.mod >= 0 ? "+" : ""}${stat.mod}`,
+                detail: `${stat.mod >= 0 ? "+" : ""}${stat.mod}`,
             });
         }
 
@@ -154,7 +149,7 @@ export function collectSkillActions(actor: ActorPF2e | null, skillSlug: string):
                 id: `action:${act.slug}`,
                 label: game.i18n.localize(act.name),
                 // pf2e 没给图标的那几个用本地库补上，否则长名字会压出扇区
-                img: act.img ?? ICON_FALLBACK[act.slug],
+                img: iconFor(act.img, SKILL_ACTION_ICONS[act.slug]),
                 cost: costToSectorCost(act.cost),
                 state: "normal",
             });

@@ -747,6 +747,81 @@ function promotedRank(rec) {
 }
 __name(promotedRank, "promotedRank");
 
+// src/icons.ts
+var CATEGORY_ICONS = {
+  strikes: "icons/svg/sword.svg",
+  actions: "icons/svg/walk.svg",
+  skills: "icons/svg/book.svg",
+  class: "icons/svg/tower-flag.svg",
+  spells: "icons/svg/aura.svg"
+};
+var SKILL_ICONS = {
+  acrobatics: "icons/svg/jump.svg",
+  arcana: "icons/commodities/treasure/talisman-embossed-rune-red.webp",
+  athletics: "icons/magic/control/buff-strength-muscle-damage.webp",
+  crafting: "icons/commodities/metal/ingot-hammered-copper.webp",
+  deception: "icons/commodities/treasure/mask-wood-tan.webp",
+  diplomacy: "icons/skills/social/diplomacy-handshake.webp",
+  intimidation: "icons/magic/control/fear-fright-mask-orange.webp",
+  medicine: "icons/tools/medical/bandage-rough.webp",
+  nature: "icons/svg/oak.svg",
+  occultism: "icons/commodities/biological/eye-blue.webp",
+  performance: "icons/skills/trades/music-notes-sound-blue.webp",
+  religion: "icons/svg/temple.svg",
+  society: "icons/environment/settlement/city-hall.webp",
+  stealth: "icons/svg/invisible.svg",
+  survival: "icons/magic/fire/flame-burning-campfire-orange.webp",
+  thievery: "icons/svg/padlock.svg"
+};
+var LORE_ICON = "icons/svg/book.svg";
+var ACTION_ICONS = {
+  stride: "icons/svg/walk.svg",
+  step: "icons/svg/leg.svg",
+  crawl: "icons/svg/falling.svg",
+  leap: "icons/svg/jump.svg",
+  stand: "icons/svg/up.svg",
+  "drop-prone": "icons/svg/falling.svg",
+  fly: "icons/svg/wing.svg",
+  burrow: "icons/svg/burrow.svg",
+  "grab-an-edge": "icons/svg/ladder.svg",
+  "arrest-a-fall": "icons/svg/wingfoot.svg",
+  mount: "icons/svg/pawprint.svg",
+  aid: "icons/skills/social/diplomacy-handshake-gray.webp",
+  ready: "icons/svg/target.svg",
+  delay: "icons/svg/clockwork.svg",
+  dismiss: "icons/svg/cancel.svg",
+  release: "icons/svg/down.svg",
+  sustain: "icons/svg/aura.svg",
+  interact: "icons/svg/item-bag.svg",
+  "point-out": "icons/svg/direction.svg",
+  "affix-a-talisman": "icons/svg/anchor.svg",
+  seek: "icons/svg/eye.svg",
+  "sense-motive": "icons/svg/eye.svg",
+  escape: "icons/svg/net.svg",
+  "take-cover": "icons/svg/shield.svg",
+  "avert-gaze": "icons/svg/blind.svg"
+};
+var SKILL_ACTION_ICONS = {
+  "recall-knowledge": "icons/skills/trades/academics-book-study-runes.webp",
+  "identify-magic": "icons/magic/symbols/question-stone-yellow.webp",
+  "identify-alchemy": "icons/skills/trades/academics-investigation-puzzles.webp",
+  "learn-a-spell": "icons/skills/trades/academics-study-reading-book.webp"
+};
+var CHECK_ICON = "icons/svg/d20-grey.svg";
+var SPELL_ENTRY_ICONS = {
+  focus: "icons/svg/aura.svg",
+  ritual: "icons/svg/statue.svg"
+};
+var SPELL_ENTRY_DEFAULT = "icons/svg/book.svg";
+function isGenericIcon(img) {
+  return !img || img.startsWith("systems/pf2e/icons/actions/");
+}
+__name(isGenericIcon, "isGenericIcon");
+function iconFor(img, fallback) {
+  return isGenericIcon(img) ? fallback : img;
+}
+__name(iconFor, "iconFor");
+
 // src/collectors/skills.ts
 function isSkillAction(a) {
   if (a.section === "basic" || a.section === "specialty-basic") return false;
@@ -762,13 +837,10 @@ function rankName(rank) {
   return ["Untrained", "Trained", "Expert", "Master", "Legendary"][rank] ?? "Untrained";
 }
 __name(rankName, "rankName");
-var ICON_FALLBACK = {
-  "recall-knowledge": "icons/skills/trades/academics-book-study-runes.webp",
-  "identify-magic": "icons/magic/symbols/question-stone-yellow.webp",
-  "identify-alchemy": "icons/skills/trades/academics-investigation-puzzles.webp",
-  "learn-a-spell": "icons/skills/trades/academics-study-reading-book.webp"
-};
-var CHECK_ICON = "icons/skills/trades/academics-scribe-quill-gray.webp";
+function skillIcon(slug) {
+  return SKILL_ICONS[slug] ?? (slug.endsWith("-lore") ? LORE_ICON : LORE_ICON);
+}
+__name(skillIcon, "skillIcon");
 function collectSkills(actor) {
   try {
     const a = actor;
@@ -792,6 +864,8 @@ function collectSkills(actor) {
     return rankSkills(entries).map((s) => ({
       id: `skill:${s.slug}`,
       label: s.label,
+      // ⚠ 技能是 Statistic 不是 item，**没有 img 字段**，只能全部自己配
+      img: skillIcon(s.slug),
       cost: null,
       state: "normal",
       // ★ 修正值走 detail（悬停时在毂里显示），**不印在扇区上** ——
@@ -812,13 +886,18 @@ function collectSkillActions(actor, skillSlug) {
     if (stat) {
       out.push({
         id: `skillcheck:${skillSlug}`,
-        // ⚠ 只叫 "Check" 而不是 "<技能> Check"：**层标题已经是技能名了**，
-        //   重复一遍既冗余又长到压出扇区（`Occultism Check` 实测溢出）。
-        label: "Check",
+        /*
+         * ★ 名字要完整（`Acrobatics Check`），不缩成 `Check`。
+         *   一度缩过，理由是"层标题已经是技能名、且长名字压出扇区"——
+         *   但**扇区上走的是图标**（见下面的 img），label 只在毂里出现，
+         *   长度根本不受限。而毂里只写 `Check` 是没信息量的
+         *   （Nous 2026-08-05：主标题该是 `Acrobatics Check`，`+13` 才是小字）。
+         */
+        label: `${stat.label} Check`,
         img: CHECK_ICON,
         cost: null,
         state: "normal",
-        detail: `${stat.label} ${stat.mod >= 0 ? "+" : ""}${stat.mod}`
+        detail: `${stat.mod >= 0 ? "+" : ""}${stat.mod}`
       });
     }
     const coll = game.pf2e?.actions;
@@ -829,7 +908,7 @@ function collectSkillActions(actor, skillSlug) {
         id: `action:${act.slug}`,
         label: game.i18n.localize(act.name),
         // pf2e 没给图标的那几个用本地库补上，否则长名字会压出扇区
-        img: act.img ?? ICON_FALLBACK[act.slug],
+        img: iconFor(act.img, SKILL_ACTION_ICONS[act.slug]),
         cost: costToSectorCost(act.cost),
         state: "normal"
       });
@@ -910,7 +989,9 @@ function collectActions(actor) {
       id: `action:${a.slug}`,
       // ⚠ 必须 localize，理由见 RawAction.name 的注释
       label: game.i18n.localize(a.name),
-      img: a.img,
+      // ⚠ 实测 25 条基础动作里 20 条用的是 pf2e 的**通用消耗图标**
+      //   （OneAction.webp 之流）—— 一圈全长一样等于没有图标，要换掉
+      img: iconFor(a.img, ACTION_ICONS[a.slug]),
       cost: costToSectorCost(a.cost),
       state: "normal"
     }));
@@ -922,6 +1003,13 @@ function collectActions(actor) {
 __name(collectActions, "collectActions");
 
 // src/collectors/class-abilities.ts
+var COST_ICONS = {
+  "1": "icons/svg/upgrade.svg",
+  "2": "icons/svg/up.svg",
+  "3": "icons/svg/explosion.svg",
+  reaction: "icons/svg/combat.svg",
+  free: "icons/svg/circle.svg"
+};
 function belongsToClass(item, classSlug, resolve) {
   const seen = /* @__PURE__ */ new Set();
   let cur = item;
@@ -967,11 +1055,16 @@ function collectClassAbilities(actor) {
       return {
         id: `class:${i.id}`,
         label: i.name,
-        // ⚠ 实测 actor 自带的动作条目 **3/3 都是通用消耗图标**
-        //   （`systems/pf2e/icons/actions/OneAction.webp` 之流），
-        //   一圈全长一样就失去区分度 → 只有专属图标才用图标，否则退回文字。
-        //   （设计定档 §7 的"已知限制"，2026-08-05 实测坐实。）
-        img: i.img && !i.img.startsWith("systems/pf2e/icons/actions/") ? i.img : void 0,
+        /*
+         * ⚠ 实测 actor 自带的动作条目**多数是通用消耗图标**
+         *   （`systems/pf2e/icons/actions/OneAction.webp` 之流），一圈全长一样。
+         *
+         * ★ 职业能力**不做逐条映射** —— 29 个职业上千个条目，按名字配图标
+         *   既做不完也必然在多职业/原型/模组内容上出错。
+         *   通用图标的一律按消耗给一个"这是几个动作"的记号图，
+         *   至少比一圈完全相同的图标有区分度，名字仍由中心毂显示。
+         */
+        img: isGenericIcon(i.img) ? COST_ICONS[String(cost ?? "")] ?? void 0 : i.img,
         cost,
         // ★ 反应在扇区上直接标出来（Nous 2026-08-05 定"用记号区分"）：
         //   它与主动动作混在同一圈里，不标的话玩家会以为它花掉一个动作。
@@ -1032,6 +1125,8 @@ function collectSpellEntries(actor) {
     return usableEntries(entries).map((e) => ({
       id: `spellentry:${e.id}`,
       label: e.name,
+      // 条目自带的是 pf2e 的默认占位图（三个条目长一样），换成按类别区分的
+      img: SPELL_ENTRY_ICONS[e.category ?? ""] ?? SPELL_ENTRY_DEFAULT,
       cost: null,
       state: "normal",
       badge: e.isFocusPool ? focusBadge(pool) : void 0
@@ -1238,7 +1333,12 @@ function openAt(x, y) {
   };
   const cat = /* @__PURE__ */ __name((id, label) => ({
     id,
-    label: `${label} (${counts[id]})`,
+    label,
+    // 分类层用单色 SVG，与内容层的彩色贴图区分开 —— 一眼看出这是导航层
+    img: CATEGORY_ICONS[id],
+    // ★ 计数移到 detail：印在扇区上会挤（`Actions (25)` 比图标宽得多），
+    //   而它是"想知道才看"的参考数，悬停时在毂里给就够了。
+    detail: `${counts[id]} available`,
     cost: null,
     state: counts[id] > 0 ? "normal" : "gated",
     reason: counts[id] > 0 ? void 0 : "Nothing available in this category right now."

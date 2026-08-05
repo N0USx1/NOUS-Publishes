@@ -2,6 +2,7 @@ import type { ActorPF2e } from "foundry-pf2e";
 import type { SectorData } from "../types";
 import { usage, promotedRank } from "../usage";
 import { isSkillAction } from "./skills";
+import { ACTION_ICONS, iconFor } from "../icons";
 
 /**
  * `game.pf2e.actions` 里一条动作的形状。
@@ -173,7 +174,9 @@ export function collectActions(actor: ActorPF2e | null): SectorData[] {
             id: `action:${a.slug}`,
             // ⚠ 必须 localize，理由见 RawAction.name 的注释
             label: game.i18n.localize(a.name),
-            img: a.img,
+            // ⚠ 实测 25 条基础动作里 20 条用的是 pf2e 的**通用消耗图标**
+            //   （OneAction.webp 之流）—— 一圈全长一样等于没有图标，要换掉
+            img: iconFor(a.img, ACTION_ICONS[a.slug]),
             cost: costToSectorCost(a.cost),
             state: "normal",
         }));

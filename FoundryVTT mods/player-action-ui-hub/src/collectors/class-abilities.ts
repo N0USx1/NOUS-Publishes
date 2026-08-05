@@ -1,6 +1,19 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import type { SectorData } from "../types";
 import { costToSectorCost } from "./actions";
+import { isGenericIcon } from "../icons";
+
+/**
+ * 按动作消耗给的记号图 —— 职业能力里通用图标条目的兜底。
+ * 不求"这个能力是什么"，只求"这一格与旁边那格不一样"。
+ */
+const COST_ICONS: Record<string, string> = {
+    "1": "icons/svg/upgrade.svg",
+    "2": "icons/svg/up.svg",
+    "3": "icons/svg/explosion.svg",
+    reaction: "icons/svg/combat.svg",
+    free: "icons/svg/circle.svg",
+};
 
 /**
  * 采集需要的最小 item 形状。抽出来才能不依赖 Foundry 做单测。
@@ -116,11 +129,18 @@ export function collectClassAbilities(actor: ActorPF2e | null): SectorData[] {
             return {
                 id: `class:${i.id}`,
                 label: i.name,
-                // ⚠ 实测 actor 自带的动作条目 **3/3 都是通用消耗图标**
-                //   （`systems/pf2e/icons/actions/OneAction.webp` 之流），
-                //   一圈全长一样就失去区分度 → 只有专属图标才用图标，否则退回文字。
-                //   （设计定档 §7 的"已知限制"，2026-08-05 实测坐实。）
-                img: i.img && !i.img.startsWith("systems/pf2e/icons/actions/") ? i.img : undefined,
+                /*
+                 * ⚠ 实测 actor 自带的动作条目**多数是通用消耗图标**
+                 *   （`systems/pf2e/icons/actions/OneAction.webp` 之流），一圈全长一样。
+                 *
+                 * ★ 职业能力**不做逐条映射** —— 29 个职业上千个条目，按名字配图标
+                 *   既做不完也必然在多职业/原型/模组内容上出错。
+                 *   通用图标的一律按消耗给一个"这是几个动作"的记号图，
+                 *   至少比一圈完全相同的图标有区分度，名字仍由中心毂显示。
+                 */
+                img: isGenericIcon(i.img)
+                    ? (COST_ICONS[String(cost ?? "")] ?? undefined)
+                    : i.img,
                 cost,
                 // ★ 反应在扇区上直接标出来（Nous 2026-08-05 定"用记号区分"）：
                 //   它与主动动作混在同一圈里，不标的话玩家会以为它花掉一个动作。
