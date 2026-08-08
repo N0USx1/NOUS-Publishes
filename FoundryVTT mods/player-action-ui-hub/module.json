@@ -1,7 +1,7 @@
 {
   "id": "player-action-ui-hub",
   "title": "Player Action UI Hub",
-  "description": "A player-side radial action hub for Pathfinder 2e: summon a wheel at your cursor, drill from category to action, and act 鈥?with your class state shown at the center.",
+  "description": "A player-side radial action hub for Pathfinder 2e: summon a wheel at your cursor, drill from category to action, and act — with your class state shown at the center.",
   "version": "0.8.0",
   "authors": [
     {
@@ -27,5 +27,12 @@
   "esmodules": ["scripts/main.js"],
   "styles": ["styles/wheel.css"],
   "languages": [],
-  "socket": false
+  "socket": false,
+  "url": "https://github.com/N0USx1/NOUS-Publishes/tree/main/FoundryVTT%20mods/player-action-ui-hub",
+  "manifest": "https://raw.githubusercontent.com/N0USx1/NOUS-Publishes/main/FoundryVTT%20mods/player-action-ui-hub/module.json",
+  "download": "https://github.com/N0USx1/NOUS-Publishes/releases/download/player-action-ui-hub-v0.8.0/player-action-ui-hub.zip",
+  "license": "https://github.com/N0USx1/NOUS-Publishes/blob/main/LICENSE",
+  "readme": "https://github.com/N0USx1/NOUS-Publishes/blob/main/FoundryVTT%20mods/player-action-ui-hub/README.md",
+  "bugs": "https://github.com/N0USx1/NOUS-Publishes/issues",
+  "changelog": "https://github.com/N0USx1/NOUS-Publishes/releases"
 }

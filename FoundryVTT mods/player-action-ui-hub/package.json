@@ -1,7 +1,7 @@
 {
   "name": "player-action-ui-hub",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "build": "esbuild src/main.ts --bundle --format=esm --keep-names --sourcemap --outfile=scripts/main.js",
