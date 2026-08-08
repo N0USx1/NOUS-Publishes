@@ -1,6 +1,8 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import type { SectorData } from "../types";
 import { SPELL_ENTRY_ICONS, SPELL_ENTRY_DEFAULT } from "../icons";
+import { spellGroupsOf, spellPages, slotMatrix, type SlotColumn } from "../spell-slots";
+import { detailLine, HUB_CLAUSE_MAX } from "../triggers";
 
 /**
  * 施法条目的最小形状。
@@ -106,26 +108,93 @@ export function collectSpellEntries(actor: ActorPF2e | null): SectorData[] {
  *   "这个法术现在按几环施放"（实测戏法 `baseRank: 1` 但 `rank: 3`，
  *   系统自动升到了角色的最高环）。我们只做遥控器，规则计算一概交给系统。
  */
-export function collectSpells(actor: ActorPF2e | null, entryId: string): SectorData[] {
+/** 法术层的一层盘面：扇区全量 + 每一环占哪一段。 */
+export interface SpellLevelData {
+    sectors: SectorData[];
+    groups: { label: string; badge?: string; from: number; count: number }[];
+    /** 点阵图的列（一列一环）；退化路径下为空 */
+    columns: SlotColumn[];
+}
+
+/**
+ * 第二层：某个施法条目下的法术，**一页一环**。
+ *
+ * ★ 页 = 环（Nous 2026-08-08 定）：和角色卡上那几栏一一对应。
+ *   同一个法术能升几环就在几页上各出现一次 —— 那不是重复，
+ *   **卡上本来就是这么显示的**，而且点哪一页就按哪一环放，一次多余点击都没有。
+ *
+ * ⚠ 扇区 id 带上 `castRank` 与 `slotIndex`：
+ *   同一个 spellId 会在多页出现，只靠 spellId **认不出玩家点的是哪一环**。
+ */
+export function collectSpells(actor: ActorPF2e | null, entryId: string): SpellLevelData {
+    const 空: SpellLevelData = { sectors: [], groups: [], columns: [] };
     try {
         const entry = (actor as any)?.spellcasting?.get?.(entryId);
-        if (!entry) return [];
-        const slots = entry.system?.slots ?? {};
+        if (!entry) return 空;
 
-        return [...(entry.spells ?? [])].map((s: any): SectorData => {
-            // 戏法与专注法术不占法术位 —— 只有普通法术才查该环的余量
-            const slot = (s.isCantrip || s.isFocusSpell) ? null : (slots[`slot${s.rank}`] ?? null);
-            return {
-                id: `spell:${entryId}:${s.id}`,
-                label: s.name,
-                img: s.img,
-                cost: spellCost(s),
-                state: "normal",
-                badge: slotBadge(slot),
-            };
-        });
+        /*
+         * ★★ **优先照角色卡的分组搬**。
+         * ⚠ 拿不到分组才走退化路径（按 `entry.spells` 平铺）——
+         *   那条路**看不见环位**，所以只是不瞎，不是等价。
+         */
+        const groups = spellGroupsOf(actor, entryId);
+        if (groups) {
+            const pages = spellPages(groups, (k: string) => game.i18n.localize(k));
+            const sectors: SectorData[] = [];
+            const ranges: SpellLevelData["groups"] = [];
+            for (const p of pages) {
+                ranges.push({ label: p.label, badge: p.badge, from: sectors.length, count: p.entries.length });
+                for (const e of p.entries) {
+                    sectors.push({
+                        id: `spell:${entryId}:${e.spellId}:${e.castRank}:${e.slotIndex}`,
+                        label: e.name,
+                        img: e.img,
+                        cost: spellCost({ actionGlyph: e.actionGlyph }),
+                        /*
+                         * ★★ **用掉的位置灰保留，不抽走**（Nous 2026-08-08）：
+                         *   > "用掉的就直接消失了，这个应该置灰保留，按照原来的 sheet
+                         *   >  点击弹窗无效，我们那个红框置灰也应该做到一样的效果。"
+                         *   ★ 角色卡对用掉的法术是**划线保留**（截图里 Force Barrage / Acid Grip）。
+                         *     整条抽走会让这一页的格数随用量变化，玩家每施一次法就要重新找位置
+                         *     （playbook 一：格数不变、宽度可变）。
+                         * ⚠ `gated` 在本盘里是**红框 + 压暗**，而且**照旧可点** ——
+                         *   点了由 pf2e 自己拒绝（"slot is already expended"），
+                         *   与角色卡上点划线法术的行为一致。
+                         * ⚠ 理由**指得到字段**（`slot.expended`），不是我们编的（playbook 7.5）。
+                         */
+                        state: e.expended ? "gated" : "normal",
+                        reason: e.expended ? "That slot is already expended." : undefined,
+                        // ⚠ 这里**不再画余量角标** —— 余量是整环共用的一个数，
+                        //   印在每一格上是同一件事说 N 遍。它现在在毂里那一行（页标签）。
+                        // ★ 法术也要有说明（Nous 2026-08-08："各种法术也没有功能说明"）
+                        detail: detailLine(e.description, false, HUB_CLAUSE_MAX,
+                                           (k: string) => game.i18n.localize(k)) ?? undefined,
+                        infoUuid: e.uuid,
+                    });
+                }
+            }
+            return { sectors, groups: ranges, columns: slotMatrix(groups) };
+        }
+
+        // —— 退化路径：拿不到卡上的分组 ——
+        const slots = entry.system?.slots ?? {};
+        return {
+            sectors: [...(entry.spells ?? [])].map((s: any): SectorData => {
+                const slot = (s.isCantrip || s.isFocusSpell) ? null : (slots[`slot${s.rank}`] ?? null);
+                return {
+                    id: `spell:${entryId}:${s.id}`,
+                    label: s.name,
+                    img: s.img,
+                    cost: spellCost(s),
+                    state: "normal",
+                    badge: slotBadge(slot),
+                };
+            }),
+            groups: [],
+            columns: [],
+        };
     } catch (err) {
         console.error("player-action-ui-hub | collectSpells 失败", err);
-        return [];
+        return 空;
     }
 }

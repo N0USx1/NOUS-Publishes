@@ -13,6 +13,13 @@
  *     --color-warm-1        #ee9b3a                 强调琥珀（正好用于"走险"态）
  *     backdrop-filter       blur(4px)               仅此一项，无饱和度/亮度调整
  *     窗体投影              0 0 10px black
+ *
+ * ⚠⚠ **2026-08-07：全表字号整体 +0.5**。
+ *   过程：+2（"太大了"）→ +1（"只要半个字号加成就好了"）→ **+0.5** 定稿。
+ *   字号一动，`wheel-app.ts` 里那几个**断行预算**和**行位**必须跟着重算 ——
+ *   它们的单位是"显示宽度"，而每单位占多少像素是字号的函数。
+ *   只改这里不改那边的后果是**静默溢出**：文字横着长出毂外，不报错。
+ *   两处的对应关系写在 wheel-app.ts 的常量注释里，改之前先读那一段。
  */
 
 #player-action-ui-hub-wheel {
@@ -112,6 +119,15 @@
 .pauih-sector-cap.state-gated {
     fill: color-mix(in srgb, black 35%, var(--background, rgba(11, 10, 19, 0.9)));
 }
+/* ★ gated 也描一圈边，红的（Nous 2026-08-07：
+     "这个置灰的其实可做一个红色边框"）。
+   ★★ 这样两态**用同一种语言说两件事**：黄边=有代价，红边=用不了，
+     一眼就分得开，也分得出"哪个更严重"。原来 gated 只是压暗 ——
+     而"暗"在深色界面上本来就不显眼，还会跟"这一格没图标"混起来。
+   ⚠ 与 risky 一样挂在**组**上：挂在扇区和端帽上各描一圈，接缝处会露出内部的边。 */
+.pauih-sector-g.state-gated {
+    filter: drop-shadow(0 0 1.6px var(--color-level-error, #d64545));
+}
 
 /* ── 扇区文字 ───────────────────────────────────────── */
 
@@ -130,7 +146,7 @@
 
 .pauih-label {
     fill: var(--color-text-primary, #efe6d8);
-    font-size: 8px;
+    font-size: 8.5px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -141,8 +157,132 @@
    改成状态直接挂在 label 自己身上，和 icon／badge 的做法一致。 */
 .pauih-label.state-gated { fill: var(--color-text-subtle, #9f8475); }
 
-.pauih-badge {
+/* ★ 蓝字 = 这一格**不是动作，是出口**。
+   ⚠ 环上那格只放一个记号（Nous 2026-08-07："边盘上面的 ui 就只放一个蓝色的加号
+     就够，本来就没地方放"）——所以字号按**一个记号**调，不是按一句话调。
+   句子在毂里（`.pauih-hub-title.tone-link`），两处各说各的。 */
+.pauih-label.tone-link {
+    fill: var(--color-text-anchor, #6ba4e0);
+    font-size: 20.5px;
+    font-weight: 300;
+}
+.pauih-hub-title.tone-link { fill: var(--color-text-anchor, #6ba4e0); }
+
+/* ★ 亮蓝 = **这一格不掷骰**（拔刀/收鞘/换握/装填）。
+   ⚠ 与 `tone-link` 用不同的蓝：那个说"点了会开一个窗"，这个说"点了不掷骰"。
+     同一个蓝会让两件事看着是一件事。 */
+.pauih-label.tone-aux { fill: var(--color-level-info, #57b6ff); }
+.pauih-hub-title.tone-aux { fill: var(--color-level-info, #57b6ff); }
+
+/* ★ **确认执行**：选完目标之后那个蓝色回车键（Nous 2026-08-08："那个 icon
+     用一个回车键代替吧，蓝色的"）。
+   ⚠ 字号 13 而不是 tone-link 的 20.5 —— 那个是给**一个 `+` 号**定的，
+     这里是个记号不是句子，但也不该占满一格。
+   ⚠ 与 `tone-link` 用不同的蓝：那个说"点了会开一个窗"（可退），
+     这个说"点了这件事就发生了"（不可退）。同一个蓝会让两者看着是一回事。
+   ★ 句子在毂里（`hubLabel`），环上只放这一个记号 —— 一格宽 46.6 单位，
+     8.5px 的常规标签也只放得下 ~11 个字符。 */
+.pauih-label.tone-confirm {
+    fill: var(--color-text-anchor, #6ba4e0);
+    font-size: 13px;
+    font-weight: 600;
+}
+.pauih-hub-title.tone-confirm { fill: var(--color-text-anchor, #6ba4e0); }
+
+/* ★ **可点的是名字本身**（Nous 2026-08-08："所有的标题都可以点击弹出细节"）。
+   ⚠⚠ **`pointer-events` 必须显式打开**：毂内文字默认是 `none`，
+     不打开就点不动，而且**不报错** —— 长得和"这功能没做"一模一样。
+   ⛔ 2026-08-08 就漏在这里：JS 给标题挂上了 `linkable`，
+     而样式只写了 `.pauih-hub-detail.linkable` / `.pauih-hub-reason.linkable`，
+     **唯独没有标题那一条**，于是名字点不动。
+     ★ 我的探针没抓到它 —— 合成的 click 直接派到元素上，**绕过 pointer-events**，
+       正好绕过坏掉的那一环（playbook 第 18 条，同一个坑第二次）。
+   ★ 反馈只用手型 + 悬停变色：名字本来就是这一屏最显眼的东西，加框加线只是弄花。 */
+.pauih-hub-title.linkable {
+    pointer-events: auto;
+    cursor: pointer;
+}
+.pauih-hub-title.linkable:hover { fill: var(--color-warm-1, #ee9b3a); }
+
+/* ⛔ **说明区的金边框已删**（Nous 2026-08-08："取消所有的细节说明"）。
+   ⚠ 样式规则也一并删掉：JS 那边已经不生成 `.pauih-hub-infobox` 了，
+     样式表里挂着一条永远匹配不到的规则，下一个人会以为这功能还在。 */
+
+/* ── 法术位点阵图（Nous 2026-08-08）───────────────────
+   一列一环、一点一位；用掉的留在原地变灰。
+   ⚠ 几何（半径/行距/列距）全在 wheel-app 里，CSS 只管颜色与字号。
+
+   ⛔ 这一段 2026-08-08 被我**误删过一次**：改隔壁那块样式时用了
+     「从注释 A 一路删到选择器 B」的切法，而这一段正夹在中间。
+     后果是点变成 SVG 默认的黑色、`spell slots` 退回继承字号（15px）
+     并压住点阵 —— 也就是 Nous 说的"位置全乱了"。
+   ★ 教训：**按范围删** 只有在"这个范围里全是要删的"时才成立，
+     而那要先读一遍范围内容。删之前不看，就是在赌。 */
+.pauih-slot-dot {
+    fill: var(--color-text-primary, #efe6d8);
+    pointer-events: none;
+}
+/* 用掉的：压暗**且缩小**，但**留在原地** —— 位置本身就是"这一环一共几个"。
+   ⚠⚠ 2026-08-08 改：原来是 `fill:none` + 0.5 描边 + 0.5 透明的**空心圈**。
+     盘实际渲染约 2.4×，那圈落地只有 0.6px，对上一个 4px 的实心点 ——
+     我自己看截图时把 `●●●○ / ●○○○ / ○○○` 整片读成"全空心"，
+     据此差点报了个不存在的问题。**playbook 12.5：两个状态只差一个小记号 =
+     用户会读成同一个状态**，判据是"不并排放也认得出吗"。
+   ★ 于是改成**小的暗实心点**，两重区分（大小 + 亮度），半径在 JS 里给
+     （`SLOT_SPENT_R`）—— 细描边在任何缩放下都不可靠，尺寸差在哪都成立。
+   ★ 顺带修了一处一致性（12.6）：动作经济的 `.pauih-pip` 一直是
+     「暗实心 = 用掉 / 亮实心 = 还剩」，点阵的空心画法是这个盘里的孤例。
+     同一件事在两处用两套画法，等于让玩家学两遍。 */
+.pauih-slot-dot.spent {
+    fill: var(--color-text-subtle, #9f8475);
+    stroke: none;
+    opacity: 0.45;
+}
+/* 当前翻到的那一环整列点亮 */
+.pauih-slot-dot.current { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-slot-dot.spent.current { fill: var(--color-warm-1, #ee9b3a); opacity: 0.4; }
+
+/* —— 悬停预示：这一发会吃掉哪一个位（Nous 2026-08-08）——
+   ★ 用 `--color-warm-2` 而不是自选一个红：它在本盘里已经是
+     「动作经济超支」那个警示色，语义同源（都在说"这要付出代价"）。
+     同类信息长得一样，玩家只用认一次（12.6）。
+   ⚠ 只可能落在**还亮着**的点上（行号取 `value − 1`），
+     所以不会和 `.spent` 撞；写在 `.current` 之后是为了赢过整列点亮那条。 */
+@keyframes pauih-slot-next {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+}
+.pauih-slot-dot.next,
+.pauih-slot-more.next {
+    fill: var(--color-warm-2, #c9593f);
+    animation: pauih-slot-next 0.8s ease-in-out infinite;
+}
+/* ⚠ 关掉动效的人要靠**颜色**读到同一件事，不能只剩一个不动的点 */
+@media (prefers-reduced-motion: reduce) {
+    .pauih-slot-dot.next,
+    .pauih-slot-more.next { animation: none; }
+}
+/* 一列画不下时顶上那个 ^ */
+.pauih-slot-more {
     font-size: 5px;
+    text-anchor: middle;
+    fill: var(--color-text-subtle, #9f8475);
+    pointer-events: none;
+    user-select: none;
+}
+.pauih-slot-more.current { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-slot-label {
+    font-size: 6px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: var(--color-text-subtle, #9f8475);
+    letter-spacing: 0.6px;
+    pointer-events: none;
+    user-select: none;
+}
+
+.pauih-badge {
+    font-size: 5.5px;
     text-anchor: middle;
     pointer-events: none;
     user-select: none;
@@ -168,7 +308,7 @@
    ⚠ 三档要**一起**调，否则主次关系会乱 —— 标题、补充信息、原因之间的比例才是层次。 */
 .pauih-hub-title {
     fill: var(--color-text-primary, #efe6d8);
-    font-size: 11px;
+    font-size: 11.5px;
     letter-spacing: 0.5px;
     text-anchor: middle;
     dominant-baseline: middle;
@@ -180,7 +320,7 @@
    断行由 wheel-app.ts 的 wrapText() 做，这里只管样式。 */
 .pauih-hub-reason {
     fill: var(--color-text-subtle, #9f8475);
-    font-size: 6.4px;
+    font-size: 6.9px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -190,7 +330,13 @@
    比原因文字亮一档 —— 它是"想知道才看"的数值，不是警告。 */
 .pauih-hub-detail {
     fill: var(--color-text-primary, #efe6d8);
-    font-size: 7.5px;
+    /* ⛔ 2026-08-08 一度改成 7.4，为的是挤出第 5 行给琥珀色状态行。
+       Nous 当场否掉：**"别去挤，把整个标题往上提一点点。"**
+       ★ 他是对的 —— 毂顶到父层之间本来就空着 38 单位，
+         **缺的是位置不是字号**。缩字号是拿可读性换空间，而那空间根本不用换。
+       ⇒ 字号退回 8，改为把标题块整体上移（见 wheel-app 的 HUB_PARENT_Y / HUB_TITLE_Y）。
+       ⛔ 改这个数要同步改 wheel-app 的 HUB_ROW_LH，那边按它算行距（只改一边＝静默重叠）。 */
+    font-size: 8px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -203,7 +349,7 @@
 /* MAP 三段翻选条，坐在毂底。文字整串来自 pf2e（"+9 (MAP -4)"）。 */
 .pauih-variant {
     fill: var(--color-text-primary, #efe6d8);
-    font-size: 6.5px;
+    font-size: 7px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;          /* 数字本身不可点，只有两侧箭头可点 */
@@ -215,7 +361,7 @@
    它们是毂内**仅有的**可点元素，其余一律 pointer-events:none。 */
 .pauih-variant-arrow {
     fill: var(--color-text-subtle, #9f8475);
-    font-size: 8px;
+    font-size: 8.5px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: auto;
@@ -260,7 +406,7 @@
 
 .pauih-cap-glyph {
     fill: var(--color-text-primary, #efe6d8);
-    font-size: 11px;
+    font-size: 11.5px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;      /* 与图标同理：命中判定交给底下的格子 */
@@ -273,7 +419,11 @@
    ⚠ 撤回退的是记账，不是把骰子收回来。 */
 
 .pauih-pip {
-    font-size: 9px;
+    /* ⚠ 9.5 → 8.5（2026-08-08）：这一行搬到毂顶之后，那一带的弦长只有 92.2
+       （底部原位是 133），Nous 一眼看出"位置不好，而且稍微缩小一个字号"。
+       ★ 圆形容器里**同一行文字在不同高度可用宽度不同** —— 搬家就得重新配字号，
+         这跟本文件顶部第 6 条是同一件事。 */
+    font-size: 8.5px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -287,7 +437,8 @@
    ★ 故意用不同字形而不是第四个 ◆：反应不占常规动作，
      画成第四个菱形会被读成"这回合有四个动作"，那是把规则简化错了。 */
 .pauih-reaction {
-    font-size: 8.5px;
+    /* ⚠ 跟着 .pauih-pip 一起缩（同排、同一行，字号不一致会看出高低差） */
+    font-size: 8px;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -299,7 +450,7 @@
 /* 职业状态区（设计定档 §7）——毂里显示 panache / 专注余量这类"甲类状态"。
    ★ 只在有内容时出现；样式沿用毂内说明文字的调子，不另造一套。 */
 .pauih-class-state {
-    font-size: 6.4px;
+    font-size: 6.9px;
     letter-spacing: 0.2px;
     text-anchor: middle;
     dominant-baseline: middle;
@@ -309,7 +460,8 @@
 }
 
 .pauih-undo {
-    font-size: 10px;
+    /* ⚠ 同排一起缩；它比菱形大一档是为了好点中，这个相对关系保持不变 */
+    font-size: 9.5px;
     font-weight: bold;
     text-anchor: middle;
     dominant-baseline: middle;
@@ -328,3 +480,38 @@
     pointer-events: none;
 }
 
+
+/* 三态警示记号（Nous 2026-08-07："置灰 + 条件说明警告 emoji"）。
+   ⚠ 字号必须**明显大于** .pauih-badge 的 5px —— emoji 在那个尺寸上认不出来，
+   而这一条恰恰是最该一眼看见的（它答的是"点下去会怎样"）。
+   ⚠ 不设 fill：emoji 是彩色字形，设了填充色反而会把它压成单色。 */
+.pauih-state-mark {
+    font-size: 9.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* MAP 阶梯：三档一起摆，当前那档亮、其余暗（Nous 2026-08-07）。
+   ⚠ 必须分 tspan 上色 —— 一个 <text> 只能一种颜色，
+   在一串数字里靠括号/星号标"当前"根本认不出来。 */
+.pauih-variant-on  { fill: var(--color-text-primary, #efe6d8); font-weight: 600; }
+.pauih-variant-off { fill: var(--color-text-subtle, #9f8475); opacity: 0.65; }
+.pauih-variant-sep { fill: var(--color-text-subtle, #9f8475); opacity: 0.45; }
+
+/* 悬停时毂里那行"我在哪一层"的小灰字（Nous 2026-08-07）。
+   ⚠ 要**明显比条目名小、比说明文字还淡** —— 它是定位用的背景信息，
+   抢了眼就变成噪音；分类层不画它（那一层的条目就是层本身）。 */
+/* ⚠ 这一行比全表多加了半号（Nous 2026-08-07："这个进阶压缩的标题可以再加半个字号"）——
+   它是**面包屑**，字太小时读不出"我在哪一层"，而那正是它唯一的用途。 */
+.pauih-hub-parent {
+    fill: var(--color-text-subtle, #9f8475);
+    font-size: 7.2px;
+    letter-spacing: 0.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    opacity: 0.75;
+    pointer-events: none;
+    user-select: none;
+}

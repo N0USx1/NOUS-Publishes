@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     classStateLines, readClassState, collectToggles, collectEffects,
-    COMMON_RESOURCES, CLASS_RESOURCES, MAX_STATE_LINES,
+    HIDDEN_RESOURCES, RESOURCE_LABELS, humanizeKey, resourceLines, MAX_STATE_LINES,
     type StateInput, type StateLine,
 } from "../src/class-state";
 
@@ -21,46 +21,51 @@ function 角色(over: any = {}) {
     } as any;
 }
 
-describe("资源：只收会变的", () => {
-    it("★ investiture 不在共通表里 —— 它是被动上限（人人 0/10），不是每回合看的状态", () => {
-        expect(COMMON_RESOURCES.map(r => r.path)).not.toContain("investiture");
+describe("资源：全推导，一条职业映射都不写", () => {
+    it("★★ 会变的池子都收 —— 判据是 max > 0，不是「这条归哪个职业」", () => {
+        const 出 = resourceLines(角色({ resources: {
+            focus: { value: 1, max: 2 },
+            heroPoints: { value: 1, max: 3 },
+            versatileVials: { value: 2, max: 3 },   // 炼金术士（remaster 后的真名）
+        } }));
+        expect(出.map((r: any) => r.label)).toEqual(["Focus", "Hero Points", "Vials"]);
+    });
+
+    it("★★ 新职业的新资源自动出现 —— 这正是删掉登记表的理由", () => {
+        // 旧表写死 crafting.infusedReagents，remaster 换成 versatileVials 之后
+        // 那一行**永远不显示且不报错**。推导式的判据不会踩这个。
+        const 出 = resourceLines(角色({ resources: { someNewPool: { value: 4, max: 9 } } }));
+        expect(出).toHaveLength(1);
+        expect(出[0].label).toBe("Some New Pool");
+        expect(出[0].value).toBe("4/9");
+    });
+
+    it("★ investiture 不显示 —— 被动上限（人人 0/10），一场战斗里不会变", () => {
+        expect(HIDDEN_RESOURCES.has("investiture")).toBe(true);
+        expect(resourceLines(角色({ resources: { investiture: { value: 0, max: 10 } } }))).toEqual([]);
     });
 
     it("max 为 0 的不显示（这角色没有这项资源）", () => {
-        const s = readClassState(角色({ resources: { focus: { value: 0, max: 0 }, heroPoints: { value: 2, max: 3 } } }));
-        expect(s.resources.map(r => r.key)).toEqual(["hero"]);
+        const 出 = resourceLines(角色({ resources: { focus: { value: 0, max: 0 }, heroPoints: { value: 2, max: 3 } } }));
+        expect(出.map((r: any) => r.label)).toEqual(["Hero Points"]);
     });
 
     it("值现读，格式是 值/上限", () => {
-        const s = readClassState(角色());
-        expect(s.resources.find(r => r.key === "focus")!.value).toBe("1/2");
-    });
-});
-
-describe("职业资源登记表（内圆按 class 可变）", () => {
-    it("★ 只登记推不出来的：哪条资源归哪个职业。值从 actor 读", () => {
-        for (const 组 of Object.values(CLASS_RESOURCES)) {
-            for (const r of 组) {
-                expect(r).not.toHaveProperty("value");
-                expect(r).not.toHaveProperty("max");
-            }
-        }
+        expect(resourceLines(角色()).find((r: any) => r.label === "Focus")!.value).toBe("1/2");
     });
 
-    it("炼金术士能读到嵌套路径的试剂", () => {
-        const s = readClassState(角色({
-            classSlug: "alchemist",
-            resources: { crafting: { infusedReagents: { value: 3, max: 8 } } },
-        }));
-        expect(s.resources.find(r => r.key === "reagents")!.value).toBe("3/8");
+    it("★ 嵌套的池子不递归 —— 实测那一层是废弃的 crafting.infusedReagents", () => {
+        expect(resourceLines(角色({ resources: { crafting: { infusedReagents: { value: 3, max: 8 } } } }))).toEqual([]);
     });
 
-    it("不是那个职业就不读它的资源", () => {
-        const s = readClassState(角色({
-            classSlug: "magus",
-            resources: { crafting: { infusedReagents: { value: 3, max: 8 } } },
-        }));
-        expect(s.resources.find(r => r.key === "reagents")).toBeUndefined();
+    it("显示名表只管好看，不管显不显示", () => {
+        expect(RESOURCE_LABELS["versatileVials"]).toBe("Vials");
+        expect(humanizeKey("versatileVials")).toBe("Versatile Vials");
+        expect(humanizeKey("focus")).toBe("Focus");
+    });
+
+    it("readClassState 把它接进去了", () => {
+        expect(readClassState(角色()).resources.map((r: any) => r.label)).toContain("Focus");
     });
 });
 
@@ -134,23 +139,52 @@ describe("effect", () => {
     });
 });
 
-describe("排版", () => {
+describe("排版：一条一行", () => {
     it("没有内容就整格不出现", () => expect(classStateLines(空)).toEqual([]));
 
-    it("★ 排序按'多快会变'：资源 → 有具体选择的开关 → effect → 纯开/关", () => {
-        const 出 = classStateLines({
-            resources: [行("focus", "Focus", "1/2")],
-            toggles: [行("toggle:a", "Plain", "on"), 行("toggle:b", "Divine Spark", "Skin Hard as Horn")],
+    it("★★ 一条一行 —— 两个数挤在一行，要找其中一个得先在串里定位它", () => {
+        // Nous 2026-08-07："hero 和 focus 那个我们之前说按照类型换行"
+        const 出 = classStateLines({ resources: [行("focus", "Focus", "1/2"), 行("hero", "Hero Points", "1/3")], toggles: [行("toggle:a", "Dragon's Flight", "on")],
             effects: [行("effect:p", "Panache", "active")],
         });
-        expect(出[0]).toBe("Focus ✦ 1/2");
-        expect(出[1]).toBe("Divine Spark ✦ Skin Hard as Horn");
-        expect(出[2]).toBe("Panache ✦ active");
+        expect(出).toEqual([
+            "Focus ✦ 1/2",
+            "Hero Points ✦ 1/3",
+            "Dragon's Flight ✦ on",
+        ]);
+        // ⚠ Panache 被上限挤掉了 —— 这是"一条一行"的**代价**，写在这里免得下次当成 bug
+        expect(出).toHaveLength(MAX_STATE_LINES);
     });
 
-    it("截断只发生在排版这一步，采集不截", () => {
-        const 多 = { ...空, resources: Array.from({ length: 6 }, (_, i) => 行(`r${i}`, `R${i}`, "1/1")) };
-        expect(classStateLines(多).length).toBe(MAX_STATE_LINES);
+    it("⚠ 条数多了会顶到上限 —— 所以顺序（资源→开关→effect）是真实取舍不是偏好", () => {
+        const 多资源 = { ...空, resources: Array.from({ length: 6 }, (_, i) => 行(`r${i}`, `R${i}`, "1/1")) };
+        expect(classStateLines(多资源).length).toBe(MAX_STATE_LINES);
+    });
+
+    it("空类目不占行（空行比不显示更糟，玩家会以为漏加载）", () => {
+        expect(classStateLines({ ...空, effects: [行("e", "Panache", "active")] }))
+            .toEqual(["Panache ✦ active"]);
+    });
+
+    it("顺序按「多快会变」：资源 → 开关 → effect", () => {
+        const 出 = classStateLines({ resources: [行("f", "Focus", "1/2")], toggles: [行("t", "T", "on")],
+            effects: [行("e", "E", "active")],
+        });
+        expect(出.map(l => l[0])).toEqual(["F", "T", "E"]);
+    });
+
+    it("开关内部：有具体选择的排前面（神火在哪比开着没信息量大）", () => {
+        const 出 = classStateLines({
+            ...空,
+            toggles: [行("a", "Plain", "on"), 行("b", "Divine Spark", "Skin Hard as Horn")],
+        });
+        expect(出[0]).toBe("Divine Spark ✦ Skin Hard as Horn");
+        expect(出[1]).toBe("Plain ✦ on");
+    });
+
+    it("行数不会超过上限", () => {
+        const 满 = { resources: [行("a","A","1")], toggles: [行("b","B","on")], effects: [行("c","C","active")] };
+        expect(classStateLines(满).length).toBeLessThanOrEqual(MAX_STATE_LINES);
     });
 });
 
@@ -159,3 +193,4 @@ describe("readClassState 出错不炸盘", () => {
         expect(readClassState(null)).toEqual(空);
     });
 });
+

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sectorArc, sectorCentroid, ringCaps, ringCapPath, capOvershoot } from "../src/geometry";
+import { sectorArc, sectorCentroid, ringCaps, ringCapPath, capOvershoot, capsFor } from "../src/geometry";
 import type { RingSpec } from "../src/geometry";
 
 /*
@@ -151,6 +151,49 @@ describe("ringCapPath", () => {
     });
 });
 
+describe("capsFor —— 一格的层，两个帽子都要补（2026-08-08 回归）", () => {
+    it("★★ 只有一格时首尾是同一格 —— start 和 end 都要", () => {
+        // Nous 实机：反应层只剩一条 Shield Block，右下那个帽子没了
+        expect(capsFor(0, 1)).toEqual(["start", "end"]);
+    });
+
+    it("正常多格：第一格只补 start，末格只补 end，中间不补", () => {
+        expect(capsFor(0, 3)).toEqual(["start"]);
+        expect(capsFor(2, 3)).toEqual(["end"]);
+        expect(capsFor(1, 3)).toEqual([]);
+    });
+
+    it("两格：一头一个，各不重复", () => {
+        expect(capsFor(0, 2)).toEqual(["start"]);
+        expect(capsFor(1, 2)).toEqual(["end"]);
+    });
+
+    it("★ 反向用例：钉住老写法为什么错（判断用「或」、取值用「三元」）", () => {
+        // 老写法等价于这个 —— 两端都进得来，但只取得到一个
+        const 老 = (pos: number, total: number): ("start" | "end")[] =>
+            (pos === 0 || pos === total - 1) ? [pos === 0 ? "start" : "end"] : [];
+        // ⚠ 格数 ≥ 2 时两者完全一致，所以它在所有常规层上都没露过马脚
+        for (const total of [2, 3, 9]) {
+            for (let pos = 0; pos < total; pos++) {
+                expect(老(pos, total)).toEqual(capsFor(pos, total));
+            }
+        }
+        // ★ 唯独退化到一格时分道扬镳 —— 这就是那个 bug
+        expect(老(0, 1)).toEqual(["start"]);
+        expect(capsFor(0, 1)).toEqual(["start", "end"]);
+    });
+
+    it("每一格的帽子都指得到一条真路径（不是空串）", () => {
+        const spec: RingSpec = { cx: 100, cy: 100, R: 86.5, W: 13.5, total: 1, gap: 0.02, arcSpan: 4.6 };
+        for (const which of capsFor(0, 1)) {
+            expect(ringCapPath(spec, which, 1)).toMatch(/^M/);
+        }
+        // 两端的路径必须不同 —— 相同就说明还是画了两个同一头
+        const [a, b] = capsFor(0, 1).map(w => ringCapPath(spec, w, 1));
+        expect(a).not.toEqual(b);
+    });
+});
+
 describe("capOvershoot —— 缺口必须把圆头算进去（2026-08-05 回归）", () => {
     /*
      * ⚠ 这一组钉的是本次修掉的 bug：老代码算缺口时**只让开了导航胶囊**，
@@ -194,5 +237,46 @@ describe("capOvershoot —— 缺口必须把圆头算进去（2026-08-05 回归
         // 圆心只退到让开边界上，圆头再往里凸 —— 墨迹于是压过界，正是老 bug 的形状
         expect(fromBottom).toBeCloseTo(clearHalf, 6);
         expect(fromBottom - capOvershoot(R, W)).toBeLessThan(clearHalf);
+    });
+});
+
+describe("不等宽分格（导航胶囊：返回宽、箭头窄）", () => {
+    const 谱 = (weights?: number[]) => ({
+        cx: 0, cy: 0, R: 100, W: 5, total: 3,
+        arcSpan: Math.PI / 2, center: Math.PI / 2, weights,
+    });
+    const 宽 = (spec: any, i: number) => {
+        const d = sectorArc(spec, i);
+        return Number(d.dash.split(" ")[0]);
+    };
+
+    it("★★ 不给权重时**逐位**等于原来的等分（不是「差不多一样」）", () => {
+        const 等分 = 谱();
+        expect(宽(等分, 0)).toBeCloseTo(宽(等分, 1), 9);
+        expect(宽(等分, 1)).toBeCloseTo(宽(等分, 2), 9);
+    });
+
+    it("中间那格按权重变宽，两边变窄", () => {
+        const 加权 = 谱([1, 2.2, 1]);
+        expect(宽(加权, 1)).toBeGreaterThan(宽(加权, 0));
+        expect(宽(加权, 0)).toBeCloseTo(宽(加权, 2), 9);
+        // 宽度比就是权重比
+        expect(宽(加权, 1) / 宽(加权, 0)).toBeCloseTo(2.2, 1);
+    });
+
+    it("★ 总跨度不变 —— 加权只是重新分配，不是把胶囊撑长", () => {
+        const 和 = (spec: any) => [0, 1, 2].reduce((n, i) => n + 宽(spec, i), 0);
+        expect(和(谱([1, 2.2, 1]))).toBeCloseTo(和(谱()), 6);
+    });
+
+    it("★ 权重长度对不上就退回等分 —— 宁可退回正确的等分，也别画歪", () => {
+        const 坏 = 谱([1, 2] as number[]);
+        expect(宽(坏, 0)).toBeCloseTo(宽(坏, 1), 9);
+    });
+
+    it("首尾仍然贴着整段弧的两端（端帽才对得上）", () => {
+        const a = sectorArc(谱([1, 2.2, 1]), 0).rotate;
+        const b = sectorArc(谱(), 0).rotate;
+        expect(a).toBeCloseTo(b, 6);
     });
 });

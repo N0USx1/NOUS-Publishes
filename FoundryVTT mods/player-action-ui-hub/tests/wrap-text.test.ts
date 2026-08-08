@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { wrapText } from "../src/text";
+import { wrapText, textWidth } from "../src/text";
 
 describe("wrapText", () => {
     it("英文按词断，不从单词中间劈开", () => {
@@ -32,5 +32,25 @@ describe("wrapText", () => {
 
     it("空串返回空数组", () => {
         expect(wrapText("", 15)).toEqual([]);
+    });
+});
+
+describe("毂内状态行的断行预算（2026-08-05 实测标定）", () => {
+    // ⚠ 单位是显示宽度：拉丁 0.5 / CJK 1。实测毂内第一行约放 43 个拉丁字符 = 21.5 单位。
+    const 预算 = 21;
+
+    it("★ 两条资源接起来（31 字符）不该断 —— 它实测宽 94px，毂内可用 131px", () => {
+        expect(wrapText("Focus ✦ 0/1 · Hero Points ✦ 1/3", 预算).length).toBe(1);
+    });
+
+    it("★ 三条接起来（46 字符）必须断 —— 实测宽 138px 已经溢出 131px", () => {
+        expect(wrapText("Focus ✦ 0/1 · Hero Points ✦ 1/3 · Mythic ✦ 2/3", 预算).length)
+            .toBeGreaterThan(1);
+    });
+
+    it("断出来的每一行都在预算内", () => {
+        for (const l of wrapText("Panache ✦ active · Cursebound ✦ 2 · Rage ✦ active", 预算)) {
+            expect(textWidth(l)).toBeLessThanOrEqual(预算);
+        }
     });
 });

@@ -1,2 +1,5 @@
 node_modules/
 *.tsbuildinfo
+
+# 内层开发仓库（.git 改名而来）—— 绝不进发布库
+.git-dev/

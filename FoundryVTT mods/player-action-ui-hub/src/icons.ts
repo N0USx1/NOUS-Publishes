@@ -16,13 +16,33 @@
  * ⚠ **不要给 pf2e 已经有图标的条目做映射** —— 那是系统的选择，我们只补空缺。
  */
 
-/** 分类层五格。用单色 SVG，与内容层的彩色贴图区分开，一眼看出这是导航层。 */
+/**
+ * 分类层。用单色 SVG，与内容层的彩色贴图区分开，一眼看出这是导航层。
+ * ⚠ **格数会变** —— `bodies` 只在真有其他身体时出现，别在别处写死个数。
+ */
 export const CATEGORY_ICONS: Record<string, string> = {
     strikes: "icons/svg/sword.svg",
     actions: "icons/svg/walk.svg",
     skills: "icons/svg/book.svg",
     class: "icons/svg/tower-flag.svg",
     spells: "icons/svg/aura.svg",
+    // 循环箭头 —— 与扇区上那个 ⟳ 记号同形，两处指的是同一件事
+    reactions: "icons/svg/regen.svg",
+    // 自由动作：不花动作点 —— 用"轻"的意象，与 actions 的走路人明确区分
+    free: "icons/svg/wing.svg",
+    /*
+     * 激活（卷轴/魔杖/药水/药剂）——**背包里那些能点一下放效果的东西**。
+     * ⚠ 不能用 `book.svg`：那是 skills 那一格在用的，同图标等于没图标。
+     * ⚠ 也不能像 spells：这两格**会同时出现**（法师既有法术书又有卷轴），
+     *   长得像就等于让人每次都要读一遍标签才知道点哪个。
+     * ★ 用箱子：与 spells 的光环、skills 的书都明显不同，
+     *   而且"从包里掏一件出来"正是这一格的语义。
+     */
+    activations: "icons/svg/chest.svg",
+    // 换的是"谁在做"，不是"做什么" —— 用个明显不同类的图标把这条轴分开
+    bodies: "icons/svg/pawprint.svg",
+    // 沙漏 —— 这一格问的是"什么该随时间降下去"
+    conditions: "icons/svg/hazard.svg",
 };
 
 /**

@@ -1,0 +1,492 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Player Action UI Hub — 轮盘几何预览</title>
+<!--
+  自包含预览：内嵌的是**真模块**，不是复制品 ——
+    · 几何 = src/geometry.ts 打包产物
+    · 样式 = styles/wheel.css 原文
+    · 常量 = 从 src/wheel-app.ts 抠出来的同一组数字
+  双击即可打开。改几何请改源码后重新生成，别在这里改。
+-->
+<style>
+:root{
+  --background: rgba(11,10,19,.9);
+  --color-cool-4:#302831; --color-text-primary:#efe6d8; --color-text-subtle:#9f8475;
+  --color-warm-1:#ee9b3a; --color-warm-2:#c9593f; --button-hover-background-color:#c9593f;
+  --color-light-2:#efe6d8; --z-index-app:30;
+}
+html,body{margin:0;height:100%;font-family:system-ui}
+body{background:
+  radial-gradient(circle at 30% 25%, #3b4a3a 0 18%, transparent 60%),
+  radial-gradient(circle at 72% 68%, #4a3f35 0 22%, transparent 65%),
+  repeating-linear-gradient(45deg,#232a26 0 14px,#1e2421 14px 28px);
+  display:grid;place-items:center;gap:18px;align-content:center}
+.stage{position:relative;width:320px;height:320px}
+.note{color:#cfd6dd;font:12px/1.7 ui-monospace,Consolas,monospace;max-width:330px;
+  background:rgba(0,0,0,.45);padding:10px 13px;border-radius:3px}
+.note b{color:#e8c06a}
+/*
+ * Player Action UI Hub — 轮盘样式
+ *
+ * ★ 现阶段一律走 Foundry 原生外观（Nous 2026-08-05 定：先按原生做，皮肤以后再设计）。
+ *   所有颜色都用 core 的 CSS 变量，**不写死色值** —— 这样用户切换 Foundry 主题
+ *   （暗色/浅色）时轮盘自动跟着变，不需要我们维护第二套配色。
+ *
+ *   变量值实测自一个真实的 core 窗体（2026-08-05，量的是计算样式而非猜 CSS 文件）：
+ *     --background          rgba(11, 10, 19, 0.9)   窗体底色，自带 0.9 透明度
+ *     --color-cool-4        #302831                 边框
+ *     --color-text-primary  #efe6d8                 主文字
+ *     --color-text-subtle   #9f8475                 弱化文字
+ *     --color-warm-1        #ee9b3a                 强调琥珀（正好用于"走险"态）
+ *     backdrop-filter       blur(4px)               仅此一项，无饱和度/亮度调整
+ *     窗体投影              0 0 10px black
+ */
+
+#player-action-ui-hub-wheel {
+    /* ★ 无框窗（window.frame:false）拿不到 AppV2 给带框窗的定位样式，
+       默认是 position:static —— 那样 setPosition 写进内联的 left/top 会被完全无视，
+       轮盘会按文档流跑到角落。实测 2026-08-04 就是这么翻车的，必须自己声明。 */
+    position: absolute;
+    /* 浮在普通窗体之上、提示层之下（core: app=30, tooltip=9999） */
+    z-index: calc(var(--z-index-app, 30) + 10);
+
+    background: none;
+    border: none;
+    box-shadow: none;
+    pointer-events: none;          /* 窗口本身不吃事件，只有 SVG 吃 */
+}
+
+/* 毛玻璃底：垫一个圆盘在 SVG 之下。
+   backdrop-filter 直接加在 SVG 元素上浏览器支持很差，垫普通伪元素才稳。 */
+#player-action-ui-hub-wheel::before {
+    content: "";
+    position: absolute;
+    /* ★ 环的外缘已经顶满 viewBox，毛玻璃底也要跟到边缘，否则环会压在它外面 */
+    inset: 0;
+    border-radius: 50%;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 0 10px black;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* 无障碍：跟随 core 对"减少透明度"偏好的处理（foundry2.css:7160 起同款）。 */
+@media (prefers-reduced-transparency) {
+    #player-action-ui-hub-wheel::before {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+#player-action-ui-hub-wheel .pauih-svg {
+    position: relative;
+    z-index: 1;                    /* 压在毛玻璃之上 */
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
+    /* 字体不写死，继承 core 的正文字体（Signika） */
+    font-family: inherit;
+}
+
+/* ── 扇区 ───────────────────────────────────────────── */
+
+/* ★ 2026-08-05：扇区由「填充的 path」换成「描边的弧」（claude-draws 画笔模型）。
+   所以本节的主角色从 fill 变成 stroke —— 环宽 = stroke-width，由 wheel-app 按 2W 写在
+   元素上，**几何一律不在 CSS 里填数**。分格与缝隙由 stroke-dasharray 表达。 */
+.pauih-sector {
+    fill: none;
+    stroke: var(--background, rgba(11, 10, 19, 0.9));
+    /* 扇区一律平头：相邻圆头会各凸出 atan(W/R)，把缝隙吃掉粘成一片。
+       只有环最外那两端是圆的，由 .pauih-sector-cap 单独补。 */
+    stroke-linecap: butt;
+    cursor: pointer;
+    transition: stroke 90ms ease-out;
+}
+
+/* 环两端的圆头端帽。半径 = 笔半径 W，圆心压在中线上（几何见 geometry.ts 的 ringCaps）。 */
+.pauih-sector-cap {
+    fill: var(--background, rgba(11, 10, 19, 0.9));
+    cursor: pointer;
+    transition: fill 90ms ease-out;
+}
+
+/* 选中/悬停 = core 自己的按钮悬停色（实测 --button-hover-background-color = #c9593f，
+   即 --color-warm-2）。用它而不是自创的金色，观感与原生按钮完全一致。
+   ★ 挂在 <g> 上而不是各自挂：端帽必须跟着它所属的扇区一起亮，
+     否则鼠标在首尾扇区上移动时，帽子和身子会分家。 */
+.pauih-sector-g:hover .pauih-sector { stroke: var(--button-hover-background-color, #c9593f); }
+.pauih-sector-g:hover .pauih-sector-cap { fill: var(--button-hover-background-color, #c9593f); }
+/* ★ 按下反馈：压暗一档，手指落下有回应（Nous 2026-08-05 要求）。 */
+.pauih-sector-g:active .pauih-sector { stroke: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+.pauih-sector-g:active .pauih-sector-cap { fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+
+/* ★ 三态（设计定档 §6.4）
+   risky = 可以做但有代价 → **亮度不变**，只加 core 的强调琥珀作标记。
+           变暗会被读成"不该做"，那是把规则简化错了。
+   gated = 规则上此刻用不了 → 压暗。仍可点击。
+
+   ⚠ risky 原来是「把描边换成琥珀」，现在描边已经是扇区本体了，那条路没了。
+     改用琥珀外发光：同样是加标记而不动亮度，语义不变。 */
+/* ★ 发光挂在**组**上，才会沿着「扇区 + 端帽」的整条外轮廓描一圈。
+   挂在两个元素上各自发光，接缝处会冒出内部的发光边，而且半圆那头容易被漏掉。 */
+.pauih-sector-g.state-risky {
+    filter: drop-shadow(0 0 1.6px var(--color-warm-1, #ee9b3a));
+}
+.pauih-sector.state-gated {
+    stroke: color-mix(in srgb, black 35%, var(--background, rgba(11, 10, 19, 0.9)));
+}
+.pauih-sector-cap.state-gated {
+    fill: color-mix(in srgb, black 35%, var(--background, rgba(11, 10, 19, 0.9)));
+}
+
+/* ── 扇区文字 ───────────────────────────────────────── */
+
+.pauih-icon {
+    /* ★ 图标**不吃鼠标事件**，命中判定全部落到底下的扇区路径上。
+       图标在 SVG 里是扇区的**兄弟节点不是子节点**，若它自己吃事件，
+       鼠标移到图标上时扇区就不再是 :hover，高亮会整块掉——
+       跟 DST 那次"按钮上叠非按钮 Image 挡住点击"是同一类坑。
+       点击也一样落到扇区上，所以功能不受影响。 */
+    pointer-events: none;
+    /* 圆角裁一下，贴合扇区的观感 */
+    clip-path: inset(0 round 2px);
+}
+.pauih-icon.state-gated { opacity: 0.42; filter: grayscale(0.7); }
+.pauih-icon.state-risky { filter: drop-shadow(0 0 2px var(--color-warm-1, #ee9b3a)); }
+
+.pauih-label {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 8px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+}
+/* ⚠ 原来写的是 `.pauih-sector.state-gated ~ .pauih-label`，靠"label 是扇区的后续兄弟"。
+   2026-08-05 扇区包进 <g> 之后兄弟关系就断了，那条会**静默失效**（不报错，只是不变色）。
+   改成状态直接挂在 label 自己身上，和 icon／badge 的做法一致。 */
+.pauih-label.state-gated { fill: var(--color-text-subtle, #9f8475); }
+
+.pauih-badge {
+    font-size: 5px;
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+}
+.pauih-badge.state-risky { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-badge.state-gated { fill: var(--color-text-subtle, #9f8475); }
+
+/* ── 中心毂 ─────────────────────────────────────────── */
+
+.pauih-hub {
+    fill: var(--background, rgba(11, 10, 19, 0.9));
+    stroke: var(--color-cool-4, #302831);
+    stroke-width: 1.5;
+    pointer-events: none;
+}
+
+.pauih-hub-title {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* 中心毂的原因文字。★ SVG 的 <text> 不会自动换行，
+   断行由 wheel-app.ts 的 wrapText() 做，这里只管样式。 */
+.pauih-hub-reason {
+    fill: var(--color-text-subtle, #9f8475);
+    font-size: 5.2px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+}
+.pauih-hub-reason.state-risky { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-hub-reason.state-gated { fill: var(--color-text-subtle, #9f8475); }
+
+/* MAP 三段翻选条，坐在毂底。文字整串来自 pf2e（"+9 (MAP -4)"）。 */
+.pauih-variant {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 6.5px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;          /* 数字本身不可点，只有两侧箭头可点 */
+    user-select: none;
+}
+
+/* ★ 两个箭头各自是独立元素，才能各自有悬停反馈 —— 整行做成一个元素时
+   鼠标在左在右都一样变色，玩家看不出点哪会往哪翻（Nous 2026-08-05 指出）。
+   它们是毂内**仅有的**可点元素，其余一律 pointer-events:none。 */
+.pauih-variant-arrow {
+    fill: var(--color-text-subtle, #9f8475);
+    font-size: 8px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+    transition: fill 80ms ease-out;
+}
+.pauih-variant-arrow:hover { fill: var(--color-warm-1, #ee9b3a); }
+
+
+/* ── 底部导航胶囊（Nous 2026-08-05 mockup）─────────────
+   坐在环底缺口里，三格：‹ 上一项 · ↩ 返回 · › 下一项。
+   它是通用导航条：上面是什么内容，‹› 就翻什么。 */
+
+/* ★ 胶囊现在是**一段弧**，和外环同构（2026-08-05 第三轮）。
+   所以它和扇区一样：弧身靠描边成形，端帽是单独的半圆 path。 */
+.pauih-cap {
+    /* ⚠ 必须显式 none —— <circle> 的 fill 默认**不是** none，
+       漏写会把整个 r=R 的圆盘填满，中间黑掉一大块（实撞过）。 */
+    fill: none;
+    stroke: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
+    stroke-linecap: butt;
+    cursor: pointer;
+    transition: stroke 90ms ease-out;
+}
+/* 胶囊两端的半圆帽：反过来只要 fill */
+.pauih-cap-end {
+    fill: color-mix(in srgb, black 45%, var(--background, rgba(11, 10, 19, 0.9)));
+    cursor: pointer;
+    transition: fill 90ms ease-out;
+}
+/* 悬停挂在组上，帽子才会跟着它那一格一起亮 */
+.pauih-cap-g:hover .pauih-cap { stroke: var(--button-hover-background-color, #c9593f); }
+.pauih-cap-g:hover .pauih-cap-end { fill: var(--button-hover-background-color, #c9593f); }
+.pauih-cap-g:active .pauih-cap { stroke: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+.pauih-cap-g:active .pauih-cap-end { fill: color-mix(in srgb, black 22%, var(--button-hover-background-color, #c9593f)); }
+
+/* 不可用的格子：照画，但不响应也不提示可点 —— 胶囊宽度因此恒定，不会忽宽忽窄 */
+.pauih-cap-g.disabled { cursor: default; pointer-events: none; }
+.pauih-cap-g.disabled .pauih-cap { stroke: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9))); }
+.pauih-cap-g.disabled .pauih-cap-end { fill: color-mix(in srgb, black 62%, var(--background, rgba(11, 10, 19, 0.9))); }
+
+.pauih-cap-glyph {
+    fill: var(--color-text-primary, #efe6d8);
+    font-size: 11px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;      /* 与图标同理：命中判定交给底下的格子 */
+    user-select: none;
+}
+.pauih-cap-glyph.disabled { fill: var(--color-text-subtle, #9f8475); opacity: 0.45; }
+
+/* ── 毂底动作经济行：三个菱形 + 红色 « 撤回 ────────────
+   ★ 系统不记动作经济，这是我们自己的账；只显示不阻止。
+   ⚠ 撤回退的是记账，不是把骰子收回来。 */
+
+.pauih-pip {
+    font-size: 9px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    user-select: none;
+    fill: var(--color-text-subtle, #9f8475);   /* 用掉的：空心暗色 */
+}
+.pauih-pip.full { fill: var(--color-text-primary, #efe6d8); }   /* 还剩的：亮 */
+.pauih-pip.over { fill: var(--color-warm-2, #c9593f); }         /* 超支：警示色 */
+
+.pauih-undo {
+    font-size: 10px;
+    font-weight: bold;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: var(--color-warm-2, #c9593f);
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+    transition: fill 80ms ease-out;
+}
+.pauih-undo:hover { fill: var(--color-warm-1, #ee9b3a); }
+.pauih-undo:active { fill: color-mix(in srgb, black 25%, var(--color-warm-2, #c9593f)); }
+.pauih-undo.disabled {
+    fill: var(--color-text-subtle, #9f8475);
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+
+
+/* ⚠ wheel.css 给 #player-action-ui-hub-wheel 设了 position:absolute（无框窗定位需要）。
+   预览里那个 id 用在普通容器上，会脱离文档流把下面的说明压住 —— 这里覆盖回来。
+   必须写在引入 wheel.css 之后，否则被它盖掉。 */
+#player-action-ui-hub-wheel{ position: relative; }
+</style>
+
+<div class="stage" id="player-action-ui-hub-wheel"><div id="host"></div></div>
+<div class="note" id="readout"></div>
+
+<script>"use strict";
+var Geo = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+  // src/geometry.ts
+  var geometry_exports = {};
+  __export(geometry_exports, {
+    capOvershoot: () => capOvershoot,
+    ringCapPath: () => ringCapPath,
+    ringCaps: () => ringCaps,
+    sectorArc: () => sectorArc,
+    sectorCentroid: () => sectorCentroid
+  });
+  var TAU = Math.PI * 2;
+  function polar(cx, cy, r, angle) {
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  }
+  function sectorAngles(spec, index) {
+    const { total, gap = 0, arcSpan = TAU, center = -Math.PI / 2 } = spec;
+    const step = arcSpan / total;
+    const start = center - arcSpan / 2 + index * step;
+    return { a0: start + gap / 2, a1: start + step - gap / 2 };
+  }
+  function sectorArc(spec, index) {
+    const { R, W } = spec;
+    const { a0, a1 } = sectorAngles(spec, index);
+    const circumference = TAU * R;
+    const drawn = (a1 - a0) * R;
+    return {
+      dash: `${drawn.toFixed(3)} ${(circumference - drawn).toFixed(3)}`,
+      rotate: a0 * 180 / Math.PI,
+      strokeWidth: 2 * W
+    };
+  }
+  function sectorCentroid(spec, index) {
+    const { a0, a1 } = sectorAngles(spec, index);
+    return polar(spec.cx, spec.cy, spec.R, (a0 + a1) / 2);
+  }
+  function ringCaps(spec) {
+    const first = sectorAngles(spec, 0);
+    const last = sectorAngles(spec, spec.total - 1);
+    return {
+      start: polar(spec.cx, spec.cy, spec.R, first.a0),
+      end: polar(spec.cx, spec.cy, spec.R, last.a1)
+    };
+  }
+  function ringCapPath(spec, which, bulge = 1) {
+    const { cx, cy, R, W } = spec;
+    const angles = which === "start" ? sectorAngles(spec, 0).a0 : sectorAngles(spec, spec.total - 1).a1;
+    const nx = Math.cos(angles);
+    const ny = Math.sin(angles);
+    const outer = { x: cx + (R + W) * nx, y: cy + (R + W) * ny };
+    const inner = { x: cx + (R - W) * nx, y: cy + (R - W) * ny };
+    const sweep = which === "start" ? 0 : 1;
+    const f = (n) => n.toFixed(3);
+    const radialR = W;
+    const tangentR = W * bulge;
+    const rot = angles * 180 / Math.PI;
+    return `M ${f(outer.x)} ${f(outer.y)} A ${f(radialR)} ${f(tangentR)} ${f(rot)} 0 ${sweep} ${f(inner.x)} ${f(inner.y)} Z`;
+  }
+  function capOvershoot(R, W, bulge = 1) {
+    return Math.asin(Math.min(1, W * bulge / R));
+  }
+  return __toCommonJS(geometry_exports);
+})();
+</script>
+<script>
+const { sectorArc, sectorCentroid, ringCapPath, capOvershoot } = Geo;
+const CX=100, CY=100;
+const R_HUB = 68;
+const GUTTER = 5;
+const W = 13.5;
+const R = R_HUB + GUTTER + W;
+const R_OUTER = R + W;
+const VIEW = 2 * R_OUTER;
+const CAP_H = 23;
+const W_CAP = CAP_H / 2;
+const CAP_SEAM = 1.6;
+const CAP_INK = (56 * Math.PI) / 180;
+const CAP_CLEAR = (4 * Math.PI) / 180;
+const CAP_BULGE = 1;
+const GAP_ANGLE = CAP_INK + 2 * CAP_CLEAR + 2 * capOvershoot(R, W, CAP_BULGE);
+const ARC_SPAN = Math.PI * 2 - GAP_ANGLE;
+
+const NS='http://www.w3.org/2000/svg';
+const el=(n,a={})=>{const e=document.createElementNS(NS,n);
+  for(const k in a) e.setAttribute(k,a[k]); return e;};
+
+const svg=el('svg',{viewBox:`0 0 ${VIEW} ${VIEW}`,class:'pauih-svg'});
+document.getElementById('host').appendChild(svg);
+
+// —— 外环：六格，混入三态 ——
+const states=['normal','normal','risky','normal','gated','normal'];
+const labels=['打击','法术','技能','物品','再装填','其他'];
+const total=states.length;
+const ring={cx:CX,cy:CY,R,W,total,gap:0.02,arcSpan:ARC_SPAN};
+
+states.forEach((st,i)=>{
+  const g=el('g',{class:`pauih-sector-g state-${st}`});
+  const d=sectorArc(ring,i);
+  const spin=el('g',{transform:`rotate(${d.rotate} ${CX} ${CY})`});
+  spin.appendChild(el('circle',{cx:CX,cy:CY,r:R,'stroke-width':d.strokeWidth,
+    'stroke-dasharray':d.dash,class:`pauih-sector state-${st}`,'data-index':i}));
+  g.appendChild(spin);
+  if(i===0||i===total-1)
+    g.appendChild(el('path',{d:ringCapPath(ring,i===0?'start':'end',CAP_BULGE),
+      class:`pauih-sector-cap state-${st}`,'data-index':i}));
+  svg.appendChild(g);
+  const c=sectorCentroid(ring,i);
+  const t=el('text',{x:c.x,y:c.y,class:`pauih-label state-${st}`});
+  t.textContent=labels[i]; svg.appendChild(t);
+});
+
+// —— 中心毂（内容屏）——
+svg.appendChild(el('circle',{cx:CX,cy:CY,r:R_HUB,class:'pauih-hub'}));
+const put=(y,cls,txt)=>{const t=el('text',{x:CX,y,class:cls});t.textContent=txt;svg.appendChild(t);};
+put(CY-14,'pauih-hub-title','打击');
+put(CY-1,'pauih-hub-reason','长剑 · 单手 · 敏捷');
+put(CY+18,'pauih-variant','+9 (MAP -4)');
+[-28,28].forEach((dx,k)=>{const a=el('text',{x:CX+dx,y:CY+18,class:'pauih-variant-arrow'});
+  a.textContent=k?'›':'‹'; svg.appendChild(a);});
+['◆','◆','◇'].forEach((p,k)=>{const e=el('text',{x:CX-11+k*11,y:CY+36,
+  class:'pauih-pip '+(k<2?'full':'')}); e.textContent=p; svg.appendChild(e);});
+
+// —— 底部导航胶囊：和外环同构的一段分段弧 ——
+// ⚠ 顺序是反的：底部一带角度增大朝左，所以 ‹ 排在最后
+const cells=[{g:'›',on:false},{g:'↩',on:true},{g:'‹',on:false}];
+const bar={cx:CX,cy:CY,R,W:W_CAP,total:cells.length,gap:CAP_SEAM/R,
+  arcSpan:CAP_INK-2*capOvershoot(R,W_CAP),center:Math.PI/2};
+cells.forEach((cell,i)=>{
+  const g=el('g',{class:'pauih-cap-g'+(cell.on?'':' disabled')});
+  const d=sectorArc(bar,i);
+  const spin=el('g',{transform:`rotate(${d.rotate} ${CX} ${CY})`});
+  spin.appendChild(el('circle',{cx:CX,cy:CY,r:R,'stroke-width':d.strokeWidth,
+    'stroke-dasharray':d.dash,class:'pauih-cap'}));
+  g.appendChild(spin);
+  if(i===0||i===cells.length-1)
+    g.appendChild(el('path',{d:ringCapPath(bar,i===0?'start':'end'),class:'pauih-cap-end'}));
+  svg.appendChild(g);
+  const c=sectorCentroid(bar,i);
+  const t=el('text',{x:c.x,y:c.y,class:'pauih-cap-glyph'+(cell.on?'':' disabled')});
+  t.textContent=cell.g; svg.appendChild(t);
+});
+
+const deg=r=>(r*180/Math.PI).toFixed(1);
+document.getElementById('readout').innerHTML =
+  `毂 <b>${R_HUB}</b> · 切割 <b>${GUTTER}</b> · 笔半径 <b>${W}</b><br>`+
+  `环中线 R=<b>${R}</b> 外缘=<b>${R_OUTER}</b> (= viewBox 半宽)<br>`+
+  `缺口 <b>${deg(GAP_ANGLE)}°</b> = 胶囊墨迹 ${deg(CAP_INK)}° + 留白 2×${deg(CAP_CLEAR)}°`+
+  ` + 环端帽 2×${deg(capOvershoot(R,W,CAP_BULGE))}°`;
+</script>

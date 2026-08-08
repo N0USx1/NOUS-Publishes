@@ -104,6 +104,12 @@ export function collectSkills(actor: ActorPF2e | null): SectorData[] {
             state: "normal",
             // ★ 修正值走 detail（悬停时在毂里显示），**不印在扇区上** ——
             //   扇区底下挂一行小字既挤又难认（Nous 2026-08-05 指出）。
+            /*
+             * ★ 加值印在**扇区上**（Nous 2026-08-08："skillcheck 里面除了 check
+             *   下面有写 +数值 之外，其他的都没有……这个得让所有的都有一致性"）。
+             *   毂里的说明区拿掉之后，每一格自己带那个数才是唯一的一致做法。
+             */
+            badge: `${s.mod >= 0 ? "+" : ""}${s.mod}`,
             detail: `${s.mod >= 0 ? "+" : ""}${s.mod} · ${rankName(s.rank)}`,
         }));
     } catch (err) {
@@ -137,6 +143,7 @@ export function collectSkillActions(actor: ActorPF2e | null, skillSlug: string):
                 img: CHECK_ICON,
                 cost: null,
                 state: "normal",
+                badge: `${stat.mod >= 0 ? "+" : ""}${stat.mod}`,
                 detail: `${stat.mod >= 0 ? "+" : ""}${stat.mod}`,
             });
         }

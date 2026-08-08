@@ -41,11 +41,16 @@ export interface StateInput {
 }
 
 /**
- * 毂里最多放几行。
+ * 最多几行状态。
  *
- * ⚠ 这个数是**排版约束**不是逻辑约束：`readClassState` 会把全部状态算出来，
- *   截断只发生在最后一步。要加行数是 Nous 的决定（属"看起来的东西"），
- *   不是我改个常量的事。
+ * ⚠ **2026-08-07 改成"一条一行"之后，这个数的含义变了**：
+ *   原来是"最多几个**类目**"（资源/开关/effect 各一行，类目数固定、不随角色变）；
+ *   现在是"最多几**条**" —— 而条数**是随角色变的**（资源多的职业会顶上来）。
+ *   ⇒ 顺序因此变成一个真实的取舍，见 `classStateLines` 里那段。
+ *
+ * ⚠ 采集端与排版端两个上限**各管各的**：这个管"算出几条"，
+ *   `wheel-app.ts` 的 `MAX_HUB_STATE_LINES` 管"毂里画得下几行"。
+ *   两者恰好都是 3，**但那是巧合不是约束** —— 别把其中一个删掉去引用另一个。
  */
 export const MAX_STATE_LINES = 3;
 
@@ -54,38 +59,68 @@ export const MAX_STATE_LINES = 3;
  * ══════════════════════════════════════════════════════════ */
 
 /**
- * 全职业共通、值得显示的资源池。
+ * **不该显示的资源池**（唯一的登记表，而且是黑名单不是白名单）。
  *
- * ⚠ **不是把 `system.resources` 整个端上来**：实测里 `investiture` 是 0/10 且
- *   人人都有 —— 它是"最多能佩戴几件投资装备"这个**被动上限**，不是每回合要看的状态。
- *   照单全收会让毂里常驻一条没人关心的行，把真正要看的挤掉。
+ * ⚠ `investiture` 是"最多能佩戴几件投资装备"这个**被动上限**，人人都有、
+ *   一场战斗里不会变。照单全收会让毂里常驻一条没人关心的行，把真要看的挤掉。
  *   判据是"**这东西会不会在一场战斗里变**"。
  */
-export const COMMON_RESOURCES: { path: string; key: string; label: string }[] = [
-    { path: "focus", key: "focus", label: "Focus" },
-    { path: "heroPoints", key: "hero", label: "Hero Points" },
-    { path: "mythicPoints", key: "mythic", label: "Mythic" },
-];
+export const HIDDEN_RESOURCES = new Set(["investiture"]);
 
 /**
- * 职业特有的资源（Nous 的"内圆按 class 可变"落点）。
+ * 资源池的显示名。**只是好看**，表里没有的会自动把键名转成人话。
  *
- * ★ 这张表存在的理由和 aura 那张一样：**"哪条资源属于哪个职业"推不出来**。
- *   `system.resources` 是个平摊的字典，没有任何字段说 infusedReagents 是炼金术士的。
- *
- * ⚠ 加新条目前先在游戏里量一次路径 —— 猜一个路径不会报错，只会永远读到 undefined
- *   然后这一行安静地不出现。
+ * ⚠ 它绝不参与"显不显示"的判断 —— 一旦参与，就又变成一张会腐坏的白名单。
  */
-export const CLASS_RESOURCES: Record<string, { path: string; key: string; label: string }[]> = {
-    // 实测路径：`actor.system.resources.crafting.infusedReagents`
-    alchemist: [{ path: "crafting.infusedReagents", key: "reagents", label: "Reagents" }],
+export const RESOURCE_LABELS: Record<string, string> = {
+    focus: "Focus",
+    heroPoints: "Hero Points",
+    mythicPoints: "Mythic",
+    versatileVials: "Vials",
+    infusedReagents: "Reagents",
 };
 
-function 读资源(a: any, path: string): { value: number; max: number } | null {
-    const v = path.split(".").reduce((o: any, k) => o?.[k], a?.system?.resources);
-    if (!v || typeof v.max !== "number" || v.max <= 0) return null;
-    return { value: Number(v.value ?? 0), max: Number(v.max) };
+/** `versatileVials` → `Versatile Vials`。表里没有的都走这个。 */
+export function humanizeKey(key: string): string {
+    return String(key)
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/^./, c => c.toUpperCase());
 }
+
+/**
+ * 毂内圆要显示的资源 —— **全推导，一条职业映射都不写**（Nous 2026-08-07 定稿）。
+ *
+ * > "圆盘的内圆是可以根据角色类型/class 更改的，
+ * >  如果他们有自己特别的 resource，那么是可以提交在这个 ui 上显示的。"
+ *
+ * ★★ **原来那张 `CLASS_RESOURCES` 删掉了，因为它已经腐坏过一次**：
+ *   表里写的是 `crafting.infusedReagents`，而 remaster 之后炼金术士真正在用的是
+ *   **`versatileVials`**（实测 2/3）；`crafting.infusedReagents` 还在，但 `max: 0`。
+ *   于是那一行**永远不显示、也不报错** —— 正是那张表自己注释里警告过的失效方式。
+ *
+ * ★ 正确判据不是"这条属于哪个职业"，而是"**它是不是一个会变的池子**"：
+ *   `system.resources` 里 `max > 0` 的都算，除掉黑名单。
+ *   专注、英雄点、神话点、炼金瓶、以及**将来任何新职业的新资源**都自动出现。
+ *
+ * ⚠ 嵌套的池子不递归：实测那一层（`crafting.*`）已经是废弃的，
+ *   而递归会把一堆根本不是池子的对象也当成资源。
+ */
+export function resourceLines(actor: ActorPF2e | null): StateLine[] {
+    const pools = (actor as any)?.system?.resources ?? {};
+    const out: StateLine[] = [];
+    for (const [key, v] of Object.entries(pools as Record<string, any>)) {
+        if (HIDDEN_RESOURCES.has(key)) continue;
+        const max = Number((v as any)?.max);
+        if (!Number.isFinite(max) || max <= 0) continue;
+        out.push({
+            key: `res:${key}`,
+            label: RESOURCE_LABELS[key] ?? humanizeKey(key),
+            value: `${Number((v as any)?.value ?? 0)}/${max}`,
+        });
+    }
+    return out;
+}
+
 
 /* ══════════════════════════════════════════════════════════
  * 采集
@@ -128,8 +163,8 @@ export function collectToggles(actor: ActorPF2e | null): StateLine[] {
  *   实测 `Effect: Panache` 的 `badge` 是 null —— panache 是"有没有"，不是"几层"。
  *   所以带 badge 的显示数字，不带的显示存在与否。
  *
- * ⚠ 不显示条件（frightened 之类）：那些 Foundry 的 token 血条与角色卡已经在显示，
- *   毂里再来一份是重复，而毂的行数很贵。
+ * ⚠ **条件（frightened 之类）不在这里收**，理由见下面那段 ⛔：
+ *   名字归游戏自己的效果面板，毂里只呈现它造成的**减值**。
  */
 export function collectEffects(actor: ActorPF2e | null): StateLine[] {
     const a = actor as any;
@@ -144,18 +179,50 @@ export function collectEffects(actor: ActorPF2e | null): StateLine[] {
     return out;
 }
 
+/*
+ * ⛔ 这里一度有个 `collectConditions()`，把 frightened 之类**按名字**排进状态行。
+ *   Nous 2026-08-08 当场收窄：**"你不需要写 status 的名字，因为游戏 ui 已经给了
+ *   很大一个了，只需要做对应的减值呈现即可。"**
+ *   ★ 他是对的：效果面板那排图标已经答了"我身上有什么"，毂里再抄一遍名字是重复；
+ *     毂里缺的是**那个净值里到底含了多少惩罚** —— 名字答不了这个，数才答得了。
+ *   ⇒ 改成在打击格上呈现**攻击减值合计**（见 collectors/strikes.ts），
+ *     这里不再收条件。删掉而不是留着：没人调用的采集器会被下一个人当成还在用。
+ */
+
+/**
+ * 影响本回合动作数的条件。
+ *
+ * ★★ **压制关系交给 pf2e**（2026-08-05 实测）：同时挂 slowed 1 + stunned 2 之后，
+ *   `actor.conditions.active` 里**只剩 stunned**（它自带 `overrides: ["slowed"]`）。
+ *   所以这里**把 active 里的减动作条件直接相加**就够了 —— 该压制的它已经压掉了。
+ *   自己写 `max(slowed, stunned)` 等于把规则抄一份进来，那份迟早分叉。
+ *
+ * ⚠ 只认这三条。别的"不能行动"类条件（麻痹、昏迷）**不在这里减动作** ——
+ *   它们的规则不是"少几个动作"而是"根本不能行动"，用动作数表达会把规则说小了。
+ *   那类留给③段的条件灰显。
+ */
+export const ACTION_CONDITIONS = ["slowed", "stunned"] as const;
+
+export function turnConditions(actor: ActorPF2e | null): { lost: number; quickened: boolean; notes: string[] } {
+    const 生效 = ((actor as any)?.conditions?.active ?? []) as any[];
+    let lost = 0;
+    const notes: string[] = [];
+    for (const c of 生效) {
+        if ((ACTION_CONDITIONS as readonly string[]).includes(c?.slug)) {
+            const n = Number(c?.value ?? 0);
+            if (Number.isFinite(n) && n > 0) { lost += n; notes.push(`${c.name}`); }
+        }
+    }
+    const quickened = 生效.some(c => c?.slug === "quickened");
+    if (quickened) notes.push("Quickened");
+    return { lost, quickened, notes };
+}
+
 /** 从 actor 取状态。**只读，绝不写 actor。** */
 export function readClassState(actor: ActorPF2e | null): StateInput {
     try {
-        const a = actor as any;
-        const classSlug: string | null = a?.class?.slug ?? null;
-        const 表 = [...COMMON_RESOURCES, ...(classSlug ? CLASS_RESOURCES[classSlug] ?? [] : [])];
+        const resources = resourceLines(actor);
 
-        const resources: StateLine[] = [];
-        for (const r of 表) {
-            const v = 读资源(a, r.path);
-            if (v) resources.push({ key: r.key, label: r.label, value: `${v.value}/${v.max}` });
-        }
         return { resources, toggles: collectToggles(actor), effects: collectEffects(actor) };
     } catch (err) {
         console.error("player-action-ui-hub | readClassState 失败", err);
@@ -168,18 +235,42 @@ export function readClassState(actor: ActorPF2e | null): StateInput {
  * ══════════════════════════════════════════════════════════ */
 
 /**
- * 状态行。
+ * 状态行 —— **一个类目一行**（Nous 2026-08-05 定）。
  *
- * ★ **没有内容就返回空数组**，那一格整个不出现（设计定档 §7）——
- *   占一个空位比不显示更糟：玩家会以为是加载失败或自己漏看了什么。
+ * > "按类目起新的行……如果是按目录入新建的话就不会出现每次都要修的概念"
  *
- * ★ 排序依据是"**多快会变**"，不是"属不属于职业"：
- *   资源（每回合都在动）→ 有具体选择的开关（神火在哪、这轮选了什么）
- *   → effect → 单纯开/关的开关（一场战斗里基本不动）。
+ * ★ **为什么按类目而不是按条目**：按条目排的话，行数随角色变
+ *   （法师 2 条、典范 5 条），版式就得跟着每个职业改一次 —— 改不完。
+ *   按类目排，**行数上限等于类目数**（现在 3），加一个职业的资源
+ *   只是让"资源"那一行变长，**排版一次都不用动**。
+ *
+ * ★ 类目顺序按"**多快会变**"：资源（每回合都在动）→ 开关（这轮选了什么）→ effect。
+ *
+ * ⚠ 类目内部才用 " · " 接；**跨类目绝不接** —— 接起来就退回成一行，
+ *   那正是 2026-08-05 顶出毂外的那个 bug。
+ *
+ * ⚠ 没有内容的类目**不占行**：空行比不显示更糟，玩家会以为漏加载了。
  */
 export function classStateLines(input: StateInput): string[] {
-    const 有选择 = input.toggles.filter(t => t.value !== "on" && t.value !== "off");
-    const 纯开关 = input.toggles.filter(t => t.value === "on" || t.value === "off");
-    const 排好 = [...input.resources, ...有选择, ...input.effects, ...纯开关];
-    return 排好.slice(0, MAX_STATE_LINES).map(l => `${l.label} ✦ ${l.value}`);
+    // 开关内部：有具体选择的排前面（"神火在哪个圣像"比"开着没"信息量大）
+    const 开关 = [
+        ...input.toggles.filter(t => t.value !== "on" && t.value !== "off"),
+        ...input.toggles.filter(t => t.value === "on" || t.value === "off"),
+    ];
+    /*
+     * ★★ **一条一行**（Nous 2026-08-07："hero 和 focus 那个我们之前说按照类型换行"）。
+     *
+     *   原来是把同一类目的几条**拼成一行**（`Hero Points ✦ 1/3 · Focus ✦ 1/1`）。
+     *   拼行省的是行数，付的是**读的代价**：两个数字挤在一起，
+     *   要找"焦点还剩几点"得先在一串里定位它。
+     *   而这几行答的正是"我现在还有什么资源"——那是要**扫一眼就读到**的东西。
+     *
+     * ⚠ 代价说清楚：一行只放一条，画得下的**条数**就少了
+     *   （原来三行能放六七条，现在三行就是三条，见 wheel-app 的 MAX_HUB_STATE_LINES）。
+     *   所以顺序变得要紧：**资源 → 开关 → effect**，
+     *   资源是"还能不能做"，最该被看见；effect 是"身上有什么"，最能等。
+     */
+    return [...input.resources, ...开关, ...input.effects]
+        .map(l => `${l.label} ✦ ${l.value}`)
+        .slice(0, MAX_STATE_LINES);
 }

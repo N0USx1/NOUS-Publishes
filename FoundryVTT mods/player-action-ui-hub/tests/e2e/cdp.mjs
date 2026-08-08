@@ -127,12 +127,89 @@ const inst = () => [...foundry.applications.instances.values()]
 const root = () => document.getElementById("player-action-ui-hub-wheel");
 // ⚠ 不要 await close()：某些状态下它的 Promise 不 settle，会把测试挂死
 inst()?.close?.(); await wait(900);
+/*
+ * ⛔⛔ 注意：这一整段活在 PRELUDE 这个**模板字符串里面** ——
+ *   注释里一个反引号都不能出现，否则当场把字符串截断
+ *   （2026-08-08 就这么写坏过一次，报错还指在无关的行上）。
+ *   所以下面提到标识符一律用「」，不用反引号。
+ *
+ * ★★ 合成一串事件时，「照真人会产生的那一串发，并且从真人的命中路径进」。
+ *   （playbook 第 18 条。这两件事各自都坑过我们一次，方向还相反。）
+ *
+ * ① 补齐「到达」那几个事件：原来只发 pointerdown/mousedown/pointerup/click，
+ *    真人要点一个东西必须先把鼠标移过去 —— 那一下移动本身可能改变界面
+ *    （2026-08-07：移过去正好把要点的东西抹掉，而断言当时是绿的）。
+ *    ⇒ 前面补 pointerover / mouseover / mousemove / pointermove。
+ *
+ * ② 换成 elementFromPoint 命中的那个元素：合成事件直接 dispatch 到某个元素上
+ *    会「绕过 pointer-events」—— 于是
+ *    - 标了 pointer-events:none 的元素照样接得住，而真人点它时事件其实落在底下那层；
+ *    - 反过来，真正坏掉的 pointer-events 也被绕过去，测试照绿。
+ *    ⚠ 两个方向都会骗人：坏的放过去（2026-08-08 毂标题点不动，探针没抓到），
+ *      好的报成坏（同日：我把 click 派到 .pauih-cap-glyph 上，那是
+ *      pointer-events:none 的字形，命中本该落到底下的 .pauih-cap，
+ *      于是「翻页按钮点不动」—— 一个我自己造出来的假 bug）。
+ *    ★ elementFromPoint 遵守 pointer-events，问它拿到的就是真人会点到的那个。
+ *
+ * ⚠ 顺带查 isConnected：重绘会把整棵子树换掉，抓着旧引用派事件什么也不会发生，
+ *   而失败长得像「功能没实现」（playbook 第 17 条）。
+ */
+/*
+ * 问「真人点这个坐标，事件会落到谁身上」。
+ *
+ * ⚠⚠ **elementFromPoint 拿的是外接框中心，这对扇区不成立**（2026-08-08 实测）：
+ *   一格扇区是**一个 <circle r=R> 靠 dasharray 切出来的**，
+ *   它的外接框是**整个圆**，中心落在**盘心**（毂上）—— 跟那一格毫无关系。
+ *   照着问会拿到毂，于是点击落到一个不相干的元素上，测试报「点不动」。
+ *   ★ 教训与它要防的那条同源：**一个通用改法在一种元素上成立，不等于在所有元素上成立**。
+ *
+ * ⇒ 分两种命中，只退回其中一种：
+ *   - 命中的是 el 的**祖先容器**（svg / content）⇒ 这个点根本不在 el 的实心部分上
+ *     （描边弧、L 形、空心框都会这样）。采信它等于把事件派到整个盘上，
+ *     dataset 全丢，失败长得像「悬停没反应」。⇒ **退回 el**。
+ *   - 命中的是**别的元素**（兄弟、或 el 内部的子节点）⇒ 那就是真人会碰到的那个，**采信**。
+ *     ★ 我撞过的假 bug 正是这一类：click 派到 pointer-events:none 的
+ *       .pauih-cap-glyph 上，而真人点那个字，事件其实落在兄弟节点 .pauih-cap 上。
+ *
+ * ⚠ 这两种情况都真实发生过，而且**第一版判据把它们混成了一条**
+ *   （写了 hit.contains(el) 就等于把祖先也采信）——
+ *   写出来的当天就造了一个假阴性：悬停验不到，看着像功能没做。
+ *   ★ 一个"更真实"的驱动方式**自己也会引入 bug**，它同样要验。
+ */
+const 真命中 = (el, cx, cy) => {
+  const hit = document.elementFromPoint(cx, cy);
+  if (!hit) return el;
+  if (hit !== el && hit.contains(el)) return el;   // 祖先 → 这个点不在 el 身上
+  return hit;
+};
 const clickEl = (el, what) => {
   if (!el) throw new Error("找不到可点元素: " + (what ?? "?"));
+  if (!el.isConnected) throw new Error("元素已不在文档上（被重绘换掉了）: " + (what ?? "?"));
   const r = el.getBoundingClientRect();
-  for (const t of ["pointerdown","mousedown","pointerup","click"])
-    el.dispatchEvent(new PointerEvent(t, { bubbles:true, cancelable:true, composed:true,
-      clientX: r.left + r.width/2, clientY: r.top + r.height/2, button: 0 }));
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const 命中 = 真命中(el, cx, cy);
+  const p = { bubbles:true, cancelable:true, composed:true, clientX:cx, clientY:cy,
+              button:0, pointerId:1, isPrimary:true };
+  for (const t of ["pointerover","mouseover","mousemove","pointermove",
+                   "pointerdown","mousedown","pointerup","mouseup","click"])
+    命中.dispatchEvent(new PointerEvent(t, p));
+};
+/*
+ * 悬停一个元素 —— 与 clickEl 同一套规矩：走命中路径、发全那一串。
+ * ⚠ mousemove 不能省：只发 mouseover 时，界面里任何「有没有人在操作」
+ *   的判断都收不到信号，失败会长成别的样子，正好盖住要验的那一条
+ *   （2026-08-07 踩过：自动收起被误触发，看起来像「移开之后内容没了」）。
+ */
+const hoverEl = (el, what) => {
+  if (!el) throw new Error("找不到可悬停元素: " + (what ?? "?"));
+  if (!el.isConnected) throw new Error("元素已不在文档上（被重绘换掉了）: " + (what ?? "?"));
+  const r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const 命中 = 真命中(el, cx, cy);
+  const p = { bubbles:true, cancelable:true, composed:true, clientX:cx, clientY:cy,
+              pointerId:1, isPrimary:true };
+  for (const t of ["pointerover","mouseover","mousemove","pointermove"])
+    命中.dispatchEvent(new PointerEvent(t, p));
 };
 /*
  * ⚠ 必须**等上一次彻底关掉**再呼下一次：AppV2 的关闭有过渡动画，

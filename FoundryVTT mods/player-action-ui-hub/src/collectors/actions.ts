@@ -1,8 +1,11 @@
 import type { ActorPF2e } from "foundry-pf2e";
 import type { SectorData } from "../types";
-import { usage, promotedRank } from "../usage";
-import { isSkillAction } from "./skills";
 import { ACTION_ICONS, iconFor } from "../icons";
+import { detailLine } from "../triggers";
+import { restrictionFor, restrictionStateOf } from "../restrictions";
+import { sheetActionsOf } from "../sheet-actions";
+import { sheetSector } from "./sheet-sectors";
+import { actionUuid } from "../action-uuids";
 
 /**
  * `game.pf2e.actions` 里一条动作的形状。
@@ -27,6 +30,11 @@ export interface RawAction {
     img?: string;
     /** ⚠ 实测有时是数组：`identify-magic → ["arcana","nature","occultism","religion"]` */
     statistic?: string | string[] | null;
+    /**
+     * ⚠ **也是本地化 key**（与 `name` 同）：实测 `trip.description === "PF2E.Actions.Trip.Description"`。
+     * 直接当文字用会印出一串 key，而且不报错 —— 同一个坑，第二个字段。
+     */
+    description?: string;
     /**
      * pf2e 自己的分类。实测取值与条数：
      * `basic`(15) / `specialty-basic`(9) / `skill`(42) / undefined(4)。
@@ -57,97 +65,43 @@ export function statisticList(statistic: string | string[] | null | undefined): 
     return Array.isArray(statistic) ? statistic : [statistic];
 }
 
-/**
- * 冷启动的高频动作顺序 —— **这是人为判断，不是游戏数据**。
+/*
+ * ⛔ **这里原来有一整套排序机器**（`COLD_START_ORDER` / `tierOf` / `rankActions`），
+ *   2026-08-07 连同它的单测一起删掉。
  *
- * ★ 必须先承认这一点：**"哪个动作更常用"不在 pf2e 的数据里**。
- *   系统标了 section、traits、cost、statistic，唯独没标频率。
- *   所以这份清单是按 PF2e 实战经验列的，**会随职业与玩法而不准**。
+ *   它排的是注册表里那 25 条通用动作。Nous 看到的结果是：
+ *   > "那个 action 大类里面，基本上全是用不到的。"
  *
- * ⚠ 它的作用**仅限冷启动**：玩家一旦真正用过某个动作，
- *   使用记录就会压过这份清单（见 `rankActions`）。
- *   换句话说，它只负责"第一次打开时不难用"，不负责"一直是对的"——
- *   长期正确性交给玩家自己的行为，那才是真实数据。
- *   （Nous 2026-08-05 拍板"两者合起来"。）
+ *   ★ 病根不在排序排得好不好 —— **排序解决不了取舍**。
+ *     把 Arrest a Fall / Avert Gaze / Burrow / Mount 排到第 3 页，它们还是占着 3 页；
+ *     而玩家真正会点的那几条，本来就已经在他自己的角色卡上了。
+ *   ★ 一并作废的还有那份"哪个更常用"的自拟清单 —— 那是**我编的数据**，
+ *     pf2e 从来没有这个字段。判据见下面 BASIC_ACTIONS。
  */
-const COLD_START_ORDER = [
-    "stride", "step", "seek", "take-cover", "aid", "demoralize", "trip",
-    "grapple", "shove", "escape", "hide", "feint", "tumble-through", "ready",
-    "delay", "stand", "drop-prone", "recall-knowledge", "point-out", "interact",
-];
 
 /**
- * 排序档位，数字越小越靠前。
+ * **常驻的那几个通用动作**（Nous 2026-08-07 点名）。
  *
- * ★ **判据是 `section` 不是 `attack` 特性**（2026-08-05 Nous 指出后改）。
- *   原来拿 `attack` 当"战斗动作"，但那个特性的真实语义是
- *   **"会吃多重攻击减值"**，和"战斗里常不常用"根本是两回事。实测后果：
- *     - `force-open`（破门，探索向）**带** attack → 被顶到第 1 页；
- *     - `take-cover` 的 traits 是**空数组** → 靠特性永远筛不到它；
- *     - `demoralize` / `seek` / `feint` 都不带 attack → 全被压到后面。
- *   这就是"UI 不反映现实"的样子：拿一个自以为等价的代理指标替换了真实语义。
+ * > "那个 action 大类里面基本上全是用不到的 —— 游戏里面提供，
+ * >  但是玩家和 GM 里面都是不会真正的去丢色子的。
+ * >  放 3-4 常用的，然后就只去读角色表里面的应该就可以。"
+ * > "我觉得可能给一个 aid、take cover、tumbling through，
+ * >  第四的（这个永远是 ui 里面最后一个）……提醒玩家去在表格里面添加。"
  *
- * ★ **只排序不过滤（downtime 除外）**，理由同样是实测出来的：
- *   "这个动作是否必须训练"不在数据里，而 PF2e 里绊摔/擒抱/推撞未训练本来就合法
- *   （实测角色运动 rank 恰好是 0）。硬过滤会把最该显示的几个删掉。
+ * ★ **哪三个是 Nous 拍的，不是我排的** —— "常不常用"这件事 pf2e 数据里没有，
+ *   我上一版靠一份自拟的 `COLD_START_ORDER` 排 25 条，
+ *   结果是一圈他从来不点的东西（Arrest a Fall / Avert Gaze / Burrow / Mount…）。
+ *   ⚠ 排序推不出取舍：把没用的排到第 3 页，它还是占着 3 页。
+ *
+ * ★ 剩下的一律**照角色卡搬** —— 玩家真会点的那些，他自己早就拖进卡里了。
+ *   这与 alpha 反馈那条完全一致：
+ *   "players can just add which actions they want… People rarely drag in all
+ *    the ones they can possibly do, just ones they commonly do."
  */
-function tierOf(a: RawAction, rankOf: (slug: string) => number): number {
-    // exploration 是规则明说的"探索模式活动"，遭遇战里用不上 → 排最后
-    if (a.traits.includes("exploration")) return 4;
-    if (a.section === "basic") return 0;              // pf2e 自己标的基础动作
-    if (a.section === "specialty-basic") return 1;    // 情境性基础动作
-    const stats = statisticList(a.statistic).filter(Boolean);
-    if (stats.length === 0) return 1;
-    // 多检定动作取最高的那个：任一训练过就算训练过（如 escape 可用运动或杂技）
-    return Math.max(...stats.map(rankOf)) >= 1 ? 2 : 3;
-}
+export const BASIC_ACTIONS = ["aid", "take-cover", "tumble-through"] as const;
 
-/**
- * 过滤 + 排序。
- *
- * 排序优先级（从强到弱）：
- *   1. **常用区**（已升上来的）按它升上来的先后 —— 见下面那条铁律；
- *   2. 冷启动清单里的次序；
- *   3. `tierOf` 的分档；
- *   4. slug 字母序兜底 —— 否则同档内顺序随集合迭代而变，
- *      玩家每次打开看到的位置都不一样。
- *
- * ★★ **位置只增不改**（Nous 2026-08-05 指出后重做）。
- *   前一版是"用过的立刻跨档顶到最前、按次数排"，那会让**每点一次动作、
- *   下次打开顺序就变**。径向菜单相对列表的唯一结构性优势就是空间记忆，
- *   位置一漂移这个优势就没了，而且它**不报错**：盘面看着正常，
- *   玩家甩向老位置点到的却是别的动作。
- *   所以排序依据是 `promotedRank`（升入先后，末尾追加、永不换位），
- *   **不是使用次数**。次数只用来判断够不够升。
- *
- * @param rankOf   技能 slug → 熟练度等级（0 = 未训练）。实测字段是 `statistic.rank`。
- * @param frontOf  动作 slug → 它在常用区排第几（不在则 `Infinity`）。默认全不在。
- */
-export function rankActions(
-    list: RawAction[],
-    rankOf: (slug: string) => number,
-    frontOf: (slug: string) => number = () => Number.POSITIVE_INFINITY,
-): RawAction[] {
-    return list
-        // ⚠ downtime 是唯一被删的，**升上来了也不收**：它按规则就不是遭遇战动作
-        //   （实测 70 条里 3 条：create-forgery / subsist / treat-disease）
-        .filter(a => !a.traits.includes("downtime"))
-        .map(a => {
-            const cold = COLD_START_ORDER.indexOf(a.slug);
-            return {
-                a,
-                front: frontOf(a.slug),
-                cold: cold < 0 ? Number.MAX_SAFE_INTEGER : cold,
-                tier: tierOf(a, rankOf),
-            };
-        })
-        .sort((x, y) =>
-            x.front - y.front
-            || x.cold - y.cold
-            || x.tier - y.tier
-            || x.a.slug.localeCompare(y.a.slug))
-        .map(x => x.a);
-}
+/** 末位那一格的 id —— 点它去开角色卡。 */
+export const SHEET_HINT_ID = "sheet:actions";
 
 /**
  * 采集通用与技能动作。只读，绝不写 actor。
@@ -160,17 +114,85 @@ export function collectActions(actor: ActorPF2e | null): SectorData[] {
         // ⚠ 局部豁免：类型包（foundry-pf2e v13 分支）对 v14 的 `game.pf2e` 覆盖不全，
         //   `actions` 这个集合没有声明。**只在这一处**，不许扩散。
         const coll = (game as any).pf2e?.actions;
-        if (!coll) return [];
-        // ★ 技能动作已分到 Skills 那一格去了（Nous 2026-08-05）：
-        //   67 条挤成 10 页，而"撬锁"这种玩家心里想的是"掷巧手"，
-        //   跟"翻滚穿过"这类战术动作放一起找不着。判据见 skills.ts 的 isSkillAction。
-        const raw: RawAction[] = [...coll.values()].filter(a => !isSkillAction(a));
-        const rankOf = (slug: string): number =>
-            (actor?.getStatistic?.(slug) as { rank?: number } | null)?.rank ?? 0;
-        // 玩家自己的常用区 —— 压过冷启动清单与分档，但**位置只增不改**
-        const front = promotedRank(usage());
+        // ⚠ **每层只算一次**：放进逐条目判定里，几十条动作会把 getRollOptions 跑几十遍
+        const 限制态 = restrictionStateOf(actor);
 
-        return rankActions(raw, rankOf, front).map((a): SectorData => ({
+        const 基本: SectorData[] = (coll ? BASIC_ACTIONS
+            .map(slug => coll.get(slug) as RawAction | undefined)
+            .filter((a): a is RawAction => !!a) : [])
+            .map(a => 通用扇区(a, 限制态));
+
+        /*
+         * ★ 卡上那份「Actions」清单 —— 玩家自己录进去的那些。
+         * ⚠ 用**同一个转换器**（`sheetSector`），与 Free / Reactions / Class 共享一份，
+         *   别在这里再抄一遍。
+         */
+        const 卡 = sheetActionsOf(actor);
+        const byId = new Map(((actor as any)?.items?.contents ?? []).map((i: any) => [i.id, i]));
+        const 自录: SectorData[] = (卡 ?? [])
+            .filter(s => s.group === "action")
+            .map(s => sheetSector(s, "class:", byId.get(s.id), 限制态));
+
+        return [...基本, ...自录, 添加提示()];
+    } catch (err) {
+        console.error("player-action-ui-hub | collectActions 失败", err);
+        return [];
+    }
+}
+
+/**
+ * 末位那一格：**去角色卡添加**。
+ *
+ * ★ 它不是一个动作，是一个出口 —— 所以用蓝字（`tone: "link"`）与真动作区分开。
+ *   Nous 的话："第四的（这个永远是 ui 里面最后一个）全部用蓝色字写，
+ *   提醒玩家去在表格里面添加 + 打开玩家表格。"
+ *
+ * ★ 为什么它比"把 70 条全摆出来"强：摆出来的那 70 条**点了也只是贴一段说明**，
+ *   而卡上那条是玩家自己配好的、带加值和规则元素的。
+ *   与其替他准备一堆半成品，不如把他领到能一次配好的地方。
+ */
+function 添加提示(): SectorData {
+    return {
+        id: SHEET_HINT_ID,
+        /*
+         * ⚠ 环上只放一个记号（Nous 2026-08-07："边盘上面的 ui 就只放一个蓝色的加号
+         *   就够，本来就没地方放"）。一格宽约 50px，塞得下记号塞不下句子。
+         */
+        label: "+",
+        // 句子在毂里说 —— 那里有的是地方
+        hubLabel: "Add on sheet",
+        cost: null,
+        state: "normal",
+        tone: "link",
+        detail: "Anything you drag onto your sheet's Actions tab shows up here. Click to open it.",
+    };
+}
+
+/**
+ * 采集**自由动作**（Nous 2026-08-07："玩家表格上还有 free action"）。
+ *
+ * ★ 完全照卡上那一节搬；卡上没有就返回空，**上层据此不画这一格**
+ *   —— 与 Bodies / Conditions 同一条规矩：灰着不传达任何信息的格子就不该常驻。
+ */
+export function collectFreeActions(actor: ActorPF2e | null): SectorData[] {
+    try {
+        const 卡 = sheetActionsOf(actor);
+        if (!卡) return [];
+        const 限制态 = restrictionStateOf(actor);
+        const byId = new Map(((actor as any)?.items?.contents ?? []).map((i: any) => [i.id, i]));
+        return 卡.filter(s => s.group === "free")
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(s => sheetSector(s, "class:", byId.get(s.id), 限制态));
+    } catch (err) {
+        console.error("player-action-ui-hub | collectFreeActions 失败", err);
+        return [];
+    }
+}
+
+/** 注册表里一条通用动作 → 扇区。 */
+function 通用扇区(a: RawAction, 限制态: ReturnType<typeof restrictionStateOf>): SectorData {
+        const 限 = restrictionFor({ slug: a.slug, traits: a.traits }, 限制态);
+        return {
             id: `action:${a.slug}`,
             // ⚠ 必须 localize，理由见 RawAction.name 的注释
             label: game.i18n.localize(a.name),
@@ -178,10 +200,25 @@ export function collectActions(actor: ActorPF2e | null): SectorData[] {
             //   （OneAction.webp 之流）—— 一圈全长一样等于没有图标，要换掉
             img: iconFor(a.img, ACTION_ICONS[a.slug]),
             cost: costToSectorCost(a.cost),
-            state: "normal",
-        }));
-    } catch (err) {
-        console.error("player-action-ui-hub | collectActions 失败", err);
-        return [];
-    }
+            /*
+             * ★ **把「要求」摆到眼前**（2026-08-05，丙类调研的副产品）：
+             *   实测注册表 70 条里 27 条有 Requirements，
+             *   而 Trip 的 "You have at least one hand free" 正是设计定档点名要处理的那条。
+             *   这是③段「条件灰显」里**可推导的那一半** ——
+             *   判断满不满足很难且容易算错，把要求显示出来推得出来，且零映射。
+             * ⚠ `description` 与 `name` 一样是本地化 key，必须 localize 后再解析。
+             */
+            detail: detailLine(
+                a.description ? game.i18n.localize(a.description) : null,
+                a.cost === "reaction",
+            ) ?? undefined,
+            /*
+             * ★ **灰显不是禁止**（三态守则）：`gated` 只是变暗 + 画 ⛔ + 在毂里说明为什么，
+             *   点下去照样执行。PF2e 的特例太多，误拦比不拦更伤。
+             */
+            state: 限?.state ?? "normal",
+            reason: 限?.reason,
+            // ★ 说明可点 → 打开纲要里那条的说明窗（毂里放不下的部分一点就有）
+            infoUuid: actionUuid(a.slug),
+        };
 }

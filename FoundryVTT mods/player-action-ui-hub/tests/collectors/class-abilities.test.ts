@@ -172,3 +172,52 @@ describe("★ 沿 grantedBy 链回溯归属", () => {
         expect(pickClassItems(items, "magus", resolver(items))).toEqual([]);
     });
 });
+
+/* ────────────────────────────────────────────────────────────
+ * alpha 反馈驱动的三条（2026-08-05）
+ * ──────────────────────────────────────────────────────────── */
+
+describe("判据从「归不归职业」改成「能不能用」", () => {
+    const 档 = (over: Partial<ClassItemLike> = {}): ClassItemLike => ({
+        id: "d", name: "Archer Dedication", type: "feat",
+        traits: ["archetype", "dedication"], category: "class", actionType: "action", ...over,
+    });
+
+    it("★ 专长档收得进来 —— traits 是 archetype/dedication，永远不含 classSlug", () => {
+        const items = [档()];
+        expect(pickClassItems(items, "magus", resolver(items)).map(i => i.name))
+            .toEqual(["Archer Dedication"]);
+    });
+
+    it("专长档在没有职业时也收（NPC 之外的无职业角色）", () => {
+        const items = [档()];
+        expect(pickClassItems(items, null, resolver(items)).length).toBe(1);
+    });
+
+    it("被动的专长档仍然不收", () => {
+        const items = [档({ actionType: "passive" })];
+        expect(pickClassItems(items, null, resolver(items))).toEqual([]);
+    });
+});
+
+describe("NPC：判据在 actor 身上，不在条目的 category 上", () => {
+    const npc动作 = (name: string, category: string, actionType = "action"): ClassItemLike =>
+        ({ id: name, name, type: "action", traits: [], category, actionType });
+
+    it("★ NPC 的招牌动作全收（它没有职业，卡上的就是它的）", () => {
+        const items = [npc动作("Engulf", "offensive"), npc动作("Attack of Opportunity", "defensive", "reaction")];
+        expect(pickClassItems(items, null, resolver(items), true).map(i => i.name))
+            .toEqual(["Engulf", "Attack of Opportunity"]);
+    });
+
+    it("NPC 的被动仍然不收（Tremorsense 那类）", () => {
+        const items = [npc动作("Tremorsense", "interaction", "passive")];
+        expect(pickClassItems(items, null, resolver(items), true)).toEqual([]);
+    });
+
+    it("★ 同样的 category 出现在 PC 身上时不该被当成 NPC 动作", () => {
+        // 第一版把判据写成"category 是 offensive/defensive"，PC 的东西会被一并放进来
+        const items = [npc动作("某个 PC 动作", "offensive")];
+        expect(pickClassItems(items, "magus", resolver(items), false)).toEqual([]);
+    });
+});

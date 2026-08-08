@@ -36,6 +36,16 @@ export interface RingSpec {
      */
     arcSpan?: number;
     /**
+     * 每格的**相对宽度**；不给就是等分。
+     *
+     * ★ 底部导航胶囊用它把返回键做宽、左右箭头做窄
+     *   （Nous 2026-08-07："左右键的宽度太大了，应该加大返回键的大小"）。
+     *
+     * ⚠ 长度必须等于 `total`，否则整段**退回等分** ——
+     *   宁可退回一个正确的等分，也不要画出一段对不齐的弧。
+     */
+    weights?: number[];
+    /**
      * 整段弧的中心角(弧度),默认 `-π/2` = 正上方。
      *
      * ★ 底部那条导航胶囊其实也是"一段带端帽的分段弧",只是中心在**正下方**。
@@ -69,10 +79,24 @@ function polar(cx: number, cy: number, r: number, angle: number): Pt {
  * 全部扇区以正上方为中心对称铺开,`arcSpan` 小于整圆时缺口落在正下方。
  */
 function sectorAngles(spec: RingSpec, index: number): { a0: number; a1: number } {
-    const { total, gap = 0, arcSpan = TAU, center = -Math.PI / 2 } = spec;
-    const step = arcSpan / total;
+    const { total, gap = 0, arcSpan = TAU, center = -Math.PI / 2, weights } = spec;
+    /*
+     * ★ **不等宽分格**（Nous 2026-08-07："左右键的宽度太大了，应该加大返回键的大小"）。
+     *
+     *   `weights` 不给就是全 1 —— 与原来的等分**逐位一致**，不是"近似一样"：
+     *   权重全相等时 `前面占的比例 = index/total`，正好等于原来的 `index * step`。
+     *   所以这条改动不会动到外环那些等分的圈。
+     *
+     * ⚠ 缝(`gap`)仍然按**每格各让一半**扣，与等分时同一套 ——
+     *   把缝按权重缩放的话，窄格子的缝会比宽格子细，看着像没对齐。
+     */
+    const w = weights && weights.length === total ? weights : null;
+    const 总权 = w ? w.reduce((a, b) => a + b, 0) : total;
+    const 前面 = w ? w.slice(0, index).reduce((a, b) => a + b, 0) : index;
+    const 本格 = w ? w[index] : 1;
     // 整段弧以 center 为中心铺开,故起点回退半段弧(默认 center = 正上方)
-    const start = center - arcSpan / 2 + index * step;
+    const start = center - arcSpan / 2 + (前面 / 总权) * arcSpan;
+    const step = (本格 / 总权) * arcSpan;
     return { a0: start + gap / 2, a1: start + step - gap / 2 };
 }
 
@@ -115,6 +139,31 @@ export function ringCaps(spec: RingSpec): { start: Pt; end: Pt } {
         start: polar(spec.cx, spec.cy, spec.R, first.a0),
         end: polar(spec.cx, spec.cy, spec.R, last.a1),
     };
+}
+
+/**
+ * 第 `pos` 格要补哪几个端帽。
+ *
+ * ⚠⚠ **只有一格时首尾是同一格，两个帽子都得补**（Nous 2026-08-08 实机发现：
+ *   反应层只剩一条 Shield Block 时，右下那个帽子没有）。
+ *   原来写的是
+ *
+ *       if (pos === 0 || pos === total - 1) 画( pos === 0 ? "start" : "end" )
+ *
+ *   条件那一半是对的（两端都要进来），**三元那一半吃掉了一个** ——
+ *   `total === 1` 时 `pos === 0` 先命中，于是永远只画 start，end 那头是个平口。
+ *   ★ 这是一类很难看出来的写法：判断用「或」、取值用「三元」，
+ *     两者对"同时成立"给出的答案不一样，而**格数 ≥ 2 时它们恰好等价** ——
+ *     于是它在所有常规层上都对，只在退化到一格时错。
+ *
+ * ★ 抽成函数是为了能钉住：这条规则本身没有几何，就是个下标判断，
+ *   而它有两个调用处（外环、底部胶囊），同一个错法各存了一份。
+ */
+export function capsFor(pos: number, total: number): ("start" | "end")[] {
+    const out: ("start" | "end")[] = [];
+    if (pos === 0) out.push("start");
+    if (pos === total - 1) out.push("end");
+    return out;
 }
 
 /**

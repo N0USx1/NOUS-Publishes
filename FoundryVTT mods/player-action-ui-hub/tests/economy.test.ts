@@ -39,10 +39,20 @@ describe("记账", () => {
         expect(remaining(A, 1)).toBe(ACTIONS_PER_TURN);
     });
 
-    it("换一轮自动清零（不必显式重置）", () => {
-        spend(A, 1, 3);
-        expect(remaining(A, 1)).toBe(0);
-        expect(remaining(A, 2)).toBe(ACTIONS_PER_TURN);
+    it("★★ 换一轮**不**自动清零 —— 规则是「你自己的回合开始时」重置", () => {
+        // 2026-08-07 实测：round 变的那一刻通常**不是**你的回合。
+        // 按 round 清的话，我在自己回合打的那几下会在下一个人行动时被抹掉，
+        // MAP 当场偏一档，而且不报错。
+        spend("a", 1, 2);
+        expect(remaining("a", 2)).toBe(1);
+        expect(remaining("a", 2)).toBe(1);   // 读第二轮不该把账清掉
+    });
+
+    it("★ 唯一的清零点是 resetTurn（由 pf2e.startTurn 钩子调）", () => {
+        spend("b", 1, 2);
+        expect(remaining("b", 1)).toBe(1);
+        resetTurn("b", 2);
+        expect(remaining("b", 2)).toBe(3);
     });
 
     it("resetTurn 当场清零", () => {
@@ -109,8 +119,10 @@ describe("撤回上一步", () => {
         expect(canUndo(A, 1)).toBe(false);
     });
 
-    it("换一轮后不能撤回上一轮的", () => {
-        spend(A, 1, 2);
-        expect(canUndo(A, 2)).toBe(false);
+    it("★ 清零之后不能再撤回清零前的花费", () => {
+        spend("u2", 1, 1);
+        expect(canUndo("u2", 1)).toBe(true);
+        resetTurn("u2", 2);
+        expect(canUndo("u2", 2)).toBe(false);
     });
 });
