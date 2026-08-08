@@ -68,6 +68,18 @@ stand on:
   this summoner's eidolon". The native model keeps the eidolon as a feat on the
   summoner's own sheet. The hub follows whichever actor you control.
 
+## Something broken or annoying?
+
+Tell me and I'll fix it — [open an issue](https://github.com/N0USx1/NOUS-Publishes/issues).
+Bug reports and "this is awkward to use" are equally welcome; the second kind is
+harder to notice from the inside.
+
+---
+
+Do u like stuff i made? Help me go further with Ko-fi!
+
+[![Support me on Ko-fi](https://raw.githubusercontent.com/N0USx1/NOUS-Publishes/main/assets/kofi-support.png)](https://ko-fi.com/nnnous)
+
 ## License
 
 Source-available, personal use only. See the [LICENSE](../../LICENSE) at the
