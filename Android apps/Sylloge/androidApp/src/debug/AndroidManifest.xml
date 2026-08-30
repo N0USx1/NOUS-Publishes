@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      ⚠️ 「所有文件访问」已经挪进**主清单**（Nous 2026-08-25 拍板切过去）——
+      这里不再重复声明。这个文件现在只剩调试面板。
+    -->
+
+    <application>
+        <!--
+          状态台：只在 debug 包里存在的取证面板（各档卡面预览 + 样本备份 + 各种探针）。
+          ⚠️ 独立的 launcher 图标，免得每次都要从主界面绕。
+        -->
+        <!-- ⚠️ 必须写**全名**：相对名 `.dev.DevActivity` 会按 **namespace**
+             (com.nous.sylloge.android) 展开成 com.nous.sylloge.android.dev.DevActivity，
+             而真正的类在 com.nous.sylloge.dev 下 ⇒ 装得上但一点就 ActivityNotFound。 -->
+        <activity
+            android:name="com.nous.sylloge.dev.DevActivity"
+            android:exported="true"
+            android:label="Sylloge 状态台"
+            android:theme="@style/Theme.Sylloge">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

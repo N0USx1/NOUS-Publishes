@@ -1,0 +1,31 @@
+[versions]
+agp = "9.2.0"
+kotlin = "2.4.10"
+composeBom = "2026.08.00"
+activityCompose = "1.11.0"
+documentfile = "1.1.0"
+lifecycle = "2.9.4"
+work = "2.10.0"
+glide = "4.16.0"
+
+[libraries]
+compose-bom          = { module = "androidx.compose:compose-bom",              version.ref = "composeBom" }
+compose-ui           = { module = "androidx.compose.ui:ui" }
+compose-ui-tooling   = { module = "androidx.compose.ui:ui-tooling" }
+compose-ui-preview   = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-material3    = { module = "androidx.compose.material3:material3" }
+activity-compose     = { module = "androidx.activity:activity-compose",        version.ref = "activityCompose" }
+documentfile         = { module = "androidx.documentfile:documentfile",        version.ref = "documentfile" }
+lifecycle-runtime-ktx= { module = "androidx.lifecycle:lifecycle-runtime-ktx",  version.ref = "lifecycle" }
+lifecycle-viewmodel  = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+work-runtime         = { module = "androidx.work:work-runtime-ktx",           version.ref = "work" }
+# 图片加载。⚠️ 官方文档点名推荐用库而不是手写两趟解码。
+# ⚠️ 引它之前查过源码：`library/` 模块**根本没有 AndroidManifest.xml**，
+#    `permission.INTERNET` 全仓只在 samples/ 的 demo 里 ⇒ 不会把联网权限合并进来。
+#    ⛔ 但这不是防线 —— 防线是 :androidApp 里那个构建期断言。
+glide                = { module = "com.github.bumptech.glide:glide",           version.ref = "glide" }
+
+[plugins]
+android-application = { id = "com.android.application",              version.ref = "agp" }
+kotlin-jvm          = { id = "org.jetbrains.kotlin.jvm",             version.ref = "kotlin" }
+compose-compiler    = { id = "org.jetbrains.kotlin.plugin.compose",  version.ref = "kotlin" }

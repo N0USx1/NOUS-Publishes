@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ⛔ 刻意不申请 INTERNET：这个 app 永不联网，权限列表用户自己能查。
+         下面三个都是本地任务/通知相关，跟网络无关。 -->
+
+    <!--
+      「所有文件访问」：Nous 2026-08-25 拍板的发布形态。
+      为什么要它（三条都是实测，⛔ 不是"应该更好"）：
+      ① `.nomedia` 目录里的照片 MediaStore 看不到、File API 看得到（同图对照实验）；
+      ② 不受 MediaStore 索引延迟影响；
+      ③ 绕开 Android 14「仅选中的照片」那片雷区——权限从三个变一个。
+      ⚠️ Play 要单独填 declaration 表，「备份类 app」是官方明列的许可用途（M10 办）。
+      ⚠️ 下面的 READ_MEDIA_* 保留为**降级路径**：用户不给全文件访问时 app 仍可用。
+    -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- ★ 视频支持（Nous 2026-08-25）：⚠️ 不是网络权限，零联网承诺不受影响 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- 备份要在后台/锁屏时继续跑 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 通知栏进度条。API 33+ 是运行时权限 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      ⛔⛔ 摘掉 WorkManager 带进来的网络相关权限。
+
+      2026-08-25 发现：我们从 M4 接 WorkManager 那天起，合并后的清单里就一直有
+      ACCESS_NETWORK_STATE —— 我却在 README 和 core-spec 里写着「零联网」。
+      那句话**字面为真**（确实没有 INTERNET），但**不完整**，而且我从没查过合并后那份。
+
+      WorkManager 用它判断「网络约束」，而**我们的任务从来不设网络约束** ⇒ 可以摘。
+      ⚠️ 摘完必须真机跑一轮备份验证 —— 万一 WorkManager 内部无条件查网络状态会抛
+      SecurityException，那是推理不出来的，只能实测。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
+
+    <!-- ★ 自定义 Application：唯一目的是**自己捕获崩溃**（不联网 ⇒ 没有崩溃上报） -->
+    <application
+        android:name=".SyllogeApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Sylloge">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- WorkManager 自带的前台服务：只是把类型标成 dataSync，服务本身不用我们写 -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <!--
+          诊断包分享用的 FileProvider。
+          ⚠️ **不需要任何网络权限** —— ACTION_SEND 只是把文件交给用户自己选的 app
+          （邮件/聊天/存到文件），零联网承诺不受影响。
+          ⚠️ exported=false + grantUriPermissions：只有我们主动授权的那一次分享能读到。
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

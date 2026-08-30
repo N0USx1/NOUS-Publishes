@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  默认语言 = 英语。任何没有单独资源的地区都落到这里。
+  ⚠️ 所有带数字的句子一律用**位置参数** %1$s / %1$d ——
+     ⛔ 绝不能靠字符串拼接，各语言语序不同，拼出来会乱。
+  ⚠️ 数量用 <plurals>，⛔ 不用 "%d photos" 硬写 ——
+     英/意/法/西 单复数不同，法语的 0 还算单数，plurals 会按各语言规则自动选。
+  ⚠️ XML 里的单引号必须写成 ’（否则 aapt 报 Unescaped apostrophe）。
+-->
+<resources>
+    <string name="app_name">Sylloge</string>
+
+    <!-- ── 上卡：准备流程的 8 步 ────────────────────────────── -->
+    <string name="step_wait_usb">Waiting for USB drive</string>
+    <string name="step_usb_found">USB drive connected</string>
+    <string name="step_checking">Checking</string>
+    <string name="step_verify_set">Verifying backup set</string>
+    <string name="step_read_log">Reading the log</string>
+    <string name="step_collect">Collecting what to copy</string>
+    <string name="step_prepared">Ready</string>
+    <string name="step_await_confirm">Waiting for confirmation</string>
+
+    <!-- ── 上卡：准备流程里每一步的细节 ──────────────────────── -->
+    <string name="prep_need_usb_grant">Not authorized yet — tap to grant</string>
+    <string name="prep_readonly">Read-only — cannot write</string>
+    <string name="prep_not_mounted">Drive not connected</string>
+    <string name="prep_marker_unreadable">Cannot read the drive’s ID file</string>
+    <string name="prep_fresh_drive">Brand-new drive</string>
+    <string name="prep_set">Set %1$s</string>
+    <string name="prep_known_count">%1$d already on record</string>
+    <string name="prep_to_copy">%1$s to copy</string>
+    <string name="prep_total">%1$s in total</string>
+
+    <!-- ── 上卡：各个状态 ──────────────────────────────────── -->
+    <string name="idle_no_usb">No USB drive authorized yet — tap to grant</string>
+    <string name="idle_plug_in">Plug in a USB drive to begin</string>
+    <string name="ready_nothing_selected">No folders picked yet</string>
+    <string name="ready_pick_folders">"Pick the folders below → "</string>
+    <string name="ready_all_backed_up">Everything is backed up</string>
+    <string name="ready_confirm_again">Tap again to confirm</string>
+    <string name="ready_start">Start backup</string>
+    <string name="ready_skip">"%1$s already there, will skip → "</string>
+    <string name="running_stop">Pause</string>
+    <string name="done_title">Backup complete</string>
+    <string name="done_detail">Copied %1$d · Skipped %2$d · Failed %3$d · Tap to check again</string>
+    <string name="failed_title">Something went wrong</string>
+    <string name="failed_detail">%1$s · Tap to retry</string>
+    <string name="resume_title">Last backup did not finish — tap to continue</string>
+    <string name="resume_detail">%1$d of %2$d done — your data is intact</string>
+    <string name="perm_partial_title">Only some photos are shared</string>
+    <string name="perm_partial_detail">The rest cannot be backed up · Tap to switch to “Allow all”</string>
+    <string name="perm_none_title">Photo access is needed</string>
+    <string name="perm_none_detail">Without it not a single photo can be read · Tap to allow</string>
+
+    <!-- ── 数量 ───────────────────────────────────────────── -->
+    <plurals name="n_photos">
+        <item quantity="one">%d photo</item>
+        <item quantity="other">%d photos</item>
+    </plurals>
+    <plurals name="n_videos">
+        <item quantity="one">%d video</item>
+        <item quantity="other">%d videos</item>
+    </plurals>
+    <!-- 照片和视频都不为 0 时怎么连起来 -->
+    <string name="media_join">%1$s · %2$s</string>
+
+    <!-- ── 通知栏 ─────────────────────────────────────────── -->
+    <string name="notif_channel">Backup progress</string>
+    <string name="notif_channel_desc">Shows how the backup to your USB drive is going</string>
+    <string name="notif_title">Backing up to USB drive</string>
+    <string name="notif_preparing">Getting ready…</string>
+    <string name="notif_progress">%1$d / %2$d  %3$s</string>
+    <string name="notif_total">%1$d files in total</string>
+    <string name="action_cancel">Pause</string>
+
+    <!-- ── 错误文案（会显示给用户） ───────────────────────────── -->
+    <string name="err_no_usb_grant">No USB drive has been authorized</string>
+    <string name="err_interrupted">The last backup was interrupted by the system. Open the app and tap “Back up to USB drive” to pick up where it left off — nothing already copied will be sent again.</string>
+    <string name="err_no_reason">The task failed and reported no reason</string>
+    <string name="err_too_big">%1$s is larger than 4 GB — FAT32 drives cannot hold a file that big (format the drive as exFAT and the limit goes away). Original error: %2$s</string>
+    <string name="folders_title">Back up these folders</string>
+    <string name="select_all">Select all</string>
+    <string name="select_none">Clear all</string>
+    <string name="folder_dialog_title">Back up this folder?</string>
+    <string name="folder_first_n">First %1$d · %2$s in total</string>
+    <string name="action_close">Close</string>
+    <string name="folder_stop_backup">Do not back up this folder</string>
+    <string name="folder_do_backup">Back up this folder</string>
+    <string name="detent_list">list view</string>
+    <string name="detent_normal">normal</string>
+    <string name="card_top">Top card</string>
+    <string name="card_bottom">Bottom card</string>
+    <string name="divider_desc">Divider between the two cards — drag or tap it to switch layout. Currently %1$s</string>
+    <string name="dots_desc">%1$s: page %2$d of %3$d</string>
+    <string name="log_empty">No backups yet</string>
+    <string name="log_failed_no_detail">%1$d failed — this backup ran before failure logging existed, so there are no details</string>
+    <string name="log_truncated">Showing only the %1$d most recent</string>
+    <string name="log_nothing_new">Nothing new was copied this time</string>
+    <string name="log_copied">Copied %1$d</string>
+    <string name="log_incl">(incl. %1$s)</string>
+    <string name="log_skipped">Skipped %1$d</string>
+    <string name="log_failed">Failed %1$d</string>
+    <string name="log_unfinished">Did not finish</string>
+    <string name="log_already_there">Already there</string>
+    <string name="log_video_prefix">"Video "</string>
+    <string name="dur_sec">%1$d s</string>
+    <string name="dur_min_sec">%1$d min %2$d s</string>
+    <string name="dur_hour_min">%1$d h %2$d min</string>
+    <string name="prep_imported">Recognised %1$d already on this drive</string>
+    <string name="acc_ok">Connected: %1$s</string>
+    <string name="acc_read_only">“%1$s” can only be read from, not written to. Either the drive’s write-protect switch is on, or it is formatted as NTFS (which Android usually mounts read-only) — reformat it as exFAT and it will work.</string>
+    <string name="acc_not_mounted">“%1$s” is not plugged in. The permission is still there — plug it back in and you can carry on.</string>
+    <string name="err_disk_full">The USB drive is full. Free up some space and tap retry — nothing already copied will be sent again. Original error: %1$s</string>
+    <string name="err_read_only">Cannot write to this drive. Either its write-protect switch is on, or it is formatted as NTFS (which Android usually mounts read-only) — reformat it as exFAT and it will work. Original error: %1$s</string>
+    <string name="err_no_write_perm">The system will not let the app write to this drive. Unplug it, plug it back in and pick the folder again. Original error: %1$s</string>
+    <string name="err_io">Something went wrong reading or writing the drive — usually a loose connection or a bad sector. Try another port or another cable. Original error: %1$s</string>
+    <string name="err_drive_gone">The USB drive was disconnected part-way through. Plug it back in and tap retry — nothing already copied will be sent again. Original error: %1$s</string>
+    <string name="err_source_gone">That photo is no longer on the phone (it may have just been deleted). Original error: %1$s</string>
+    <string name="err_perm_revoked">The system revoked access to this drive. Pick the USB folder again to carry on. Original error: %1$s</string>
+    <string name="err_cannot_create">Could not create “%1$s” on the USB drive. Usually this means the drive is full, write-protected, or was unplugged — check and tap retry.</string>
+    <string name="err_tree_unopenable">Could not open the backup folder on the USB drive. The drive may have been unplugged, or the permission may have lapsed. Plug it back in, and pick the folder again if needed.</string>
+    <string name="err_marker_bad">The backup marker file on this drive could not be read (%1$s). The drive may have been written by other software, or the file may be damaged.</string>
+    <string name="err_too_many_dupes">There are already hundreds of copies of “%1$s” on the drive, so numbering stopped here.</string>
+    <string name="running_preparing">Getting ready…</string>
+    <string name="about_tagline">Fully automated offline tool to backup photos into a usb drive</string>
+    <string name="about_no_net">NO ads, NO internet permission needed.</string>
+    <string name="about_no_delete">DOES NOT delete your phone files.</string>
+    <string name="about_saved_location">Saved location</string>
+    <string name="about_hide_nomedia_title">Hide .nomedia folders by default</string>
+    <string name="about_hide_nomedia_detail">Hides app clutter folders (recommended to keep on)</string>
+    <string name="about_export_title">Export error report</string>
+    <string name="about_export_detail">Exports the diagnostic file and opens the feedback page</string>
+    <string name="about_kofi_title">Support the developer</string>
+    <string name="about_version">Version %1$s</string>
+</resources>

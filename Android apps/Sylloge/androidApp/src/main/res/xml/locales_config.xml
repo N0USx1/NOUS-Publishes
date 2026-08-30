@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  声明本 app 支持哪些语言。
+  ★ 有了它，Android 13+ 的「设置 → 应用 → Sylloge → 语言」里才会出现语言选择项，
+    用户可以**只把这个 app 切成别的语言**而不动整机语言。
+  ⚠️ 顺序 = 系统列表里的顺序；第一个是默认。
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="zh" />
+    <locale android:name="it" />
+    <locale android:name="fr" />
+    <locale android:name="es" />
+</locale-config>

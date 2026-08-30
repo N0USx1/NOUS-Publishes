@@ -8,6 +8,7 @@ work lives in its own subfolder.
 | Folder | Description |
 |---|---|
 | [`FoundryVTT mods/`](./FoundryVTT%20mods/) | Foundry Virtual Tabletop modules |
+| [`Android apps/`](./Android%20apps/) | Android applications (Sylloge — offline photo backup to USB) |
 
 ## License
 

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Français.
+  ⚠️ 撇号一律写成 ’（aapt 不接受裸的撇号，会报 Unescaped apostrophe）。
+  ⚠️ 法语的 0 用**单数**形式（« 0 photo »）—— plurals 里 one 会同时覆盖 0 和 1，
+     这正是不能手写 "%d photos" 的原因。
+-->
+<resources>
+    <string name="step_wait_usb">En attente de la clé USB</string>
+    <string name="step_usb_found">Clé USB connectée</string>
+    <string name="step_checking">Vérification</string>
+    <string name="step_verify_set">Vérification de la sauvegarde</string>
+    <string name="step_read_log">Lecture du journal</string>
+    <string name="step_collect">Sélection des fichiers à copier</string>
+    <string name="step_prepared">Prêt</string>
+    <string name="step_await_confirm">En attente de confirmation</string>
+
+    <string name="prep_need_usb_grant">Pas encore autorisée — touchez pour le faire</string>
+    <string name="prep_readonly">Lecture seule — écriture impossible</string>
+    <string name="prep_not_mounted">Clé non connectée</string>
+    <string name="prep_marker_unreadable">Impossible de lire le fichier d’identification</string>
+    <string name="prep_fresh_drive">Clé neuve</string>
+    <string name="prep_set">Sauvegarde %1$s</string>
+    <string name="prep_known_count">%1$d déjà enregistrés</string>
+    <string name="prep_to_copy">%1$s à copier</string>
+    <string name="prep_total">%1$s au total</string>
+
+    <string name="idle_no_usb">Aucune clé USB autorisée — touchez pour le faire</string>
+    <string name="idle_plug_in">Branchez une clé USB pour commencer</string>
+    <string name="ready_nothing_selected">Aucun dossier sélectionné</string>
+    <string name="ready_pick_folders">"Choisissez les dossiers ci-dessous → "</string>
+    <string name="ready_all_backed_up">Tout est déjà sauvegardé</string>
+    <string name="ready_confirm_again">Touchez à nouveau pour confirmer</string>
+    <string name="ready_start">Lancer la sauvegarde</string>
+    <string name="ready_skip">"%1$s déjà présents, ignorés → "</string>
+    <string name="running_stop">Suspendre</string>
+    <string name="done_title">Sauvegarde terminée</string>
+    <string name="done_detail">Copiés %1$d · Ignorés %2$d · Échecs %3$d · Touchez pour revérifier</string>
+    <string name="failed_title">Un problème est survenu</string>
+    <string name="failed_detail">%1$s · Touchez pour réessayer</string>
+    <string name="resume_title">La dernière sauvegarde ne s’est pas terminée — touchez pour continuer</string>
+    <string name="resume_detail">%1$d sur %2$d effectués — vos données sont intactes</string>
+    <string name="perm_partial_title">Seules certaines photos sont partagées</string>
+    <string name="perm_partial_detail">Les autres ne peuvent pas être sauvegardées · Touchez et choisissez « Tout autoriser »</string>
+    <string name="perm_none_title">L’accès aux photos est nécessaire</string>
+    <string name="perm_none_detail">Sans lui, aucune photo ne peut être lue · Touchez pour autoriser</string>
+
+    <plurals name="n_photos">
+        <item quantity="one">%d photo</item>
+        <item quantity="other">%d photos</item>
+    </plurals>
+    <plurals name="n_videos">
+        <item quantity="one">%d vidéo</item>
+        <item quantity="other">%d vidéos</item>
+    </plurals>
+    <string name="media_join">%1$s · %2$s</string>
+
+    <string name="notif_channel">Progression de la sauvegarde</string>
+    <string name="notif_channel_desc">Affiche l’avancement de la sauvegarde vers la clé USB</string>
+    <string name="notif_title">Sauvegarde vers la clé USB</string>
+    <string name="notif_preparing">Préparation…</string>
+    <string name="notif_progress">%1$d / %2$d  %3$s</string>
+    <string name="notif_total">%1$d fichiers au total</string>
+    <string name="action_cancel">Suspendre</string>
+
+    <string name="err_no_usb_grant">Aucune clé USB autorisée</string>
+    <string name="err_interrupted">La dernière sauvegarde a été interrompue par le système. Ouvrez l’application et touchez « Sauvegarder sur la clé USB » pour reprendre où elle s’était arrêtée : rien de ce qui a déjà été copié ne sera renvoyé.</string>
+    <string name="err_no_reason">La tâche a échoué sans motif indiqué</string>
+    <string name="err_too_big">Le fichier %1$s dépasse 4 Go : une clé en FAT32 ne peut pas contenir un fichier aussi gros (en la formatant en exFAT, la limite disparaît). Erreur d’origine : %2$s</string>
+    <string name="folders_title">Sauvegarder ces dossiers</string>
+    <string name="select_all">Tout sélectionner</string>
+    <string name="select_none">Tout désélectionner</string>
+    <string name="folder_dialog_title">Sauvegarder ce dossier ?</string>
+    <string name="folder_first_n">%1$d premiers · %2$s au total</string>
+    <string name="action_close">Fermer</string>
+    <string name="folder_stop_backup">Ne pas sauvegarder ce dossier</string>
+    <string name="folder_do_backup">Sauvegarder ce dossier</string>
+    <string name="detent_list">vue liste</string>
+    <string name="detent_normal">normal</string>
+    <string name="card_top">Carte du haut</string>
+    <string name="card_bottom">Carte du bas</string>
+    <string name="divider_desc">Séparateur entre les deux cartes — faites-le glisser ou touchez-le pour changer la disposition. Actuellement : %1$s</string>
+    <string name="dots_desc">%1$s : page %2$d sur %3$d</string>
+    <string name="log_empty">Aucune sauvegarde pour l’instant</string>
+    <string name="log_failed_no_detail">%1$d en échec — cette sauvegarde est antérieure à l’enregistrement des échecs, il n’y a donc pas de détails</string>
+    <string name="log_truncated">Seuls les %1$d plus récents sont affichés</string>
+    <string name="log_nothing_new">Rien de nouveau n’a été copié cette fois</string>
+    <string name="log_copied">Copiés %1$d</string>
+    <string name="log_incl">(dont %1$s)</string>
+    <string name="log_skipped">Ignorés %1$d</string>
+    <string name="log_failed">Échecs %1$d</string>
+    <string name="log_unfinished">Non terminé</string>
+    <string name="log_already_there">Déjà présent</string>
+    <string name="log_video_prefix">"Vidéo "</string>
+    <string name="dur_sec">%1$d s</string>
+    <string name="dur_min_sec">%1$d min %2$d s</string>
+    <string name="dur_hour_min">%1$d h %2$d min</string>
+    <string name="prep_imported">%1$d déjà présents reconnus sur la clé</string>
+    <string name="acc_ok">Connectée : %1$s</string>
+    <string name="acc_read_only">« %1$s » est accessible en lecture seule. Soit son commutateur de protection en écriture est activé, soit elle est formatée en NTFS (qu’Android monte généralement en lecture seule) : reformatez-la en exFAT et elle fonctionnera.</string>
+    <string name="acc_not_mounted">« %1$s » n’est pas branchée. L’autorisation est toujours valide : rebranchez-la et vous pourrez continuer.</string>
+    <string name="err_disk_full">La clé USB est pleine. Libérez de l’espace puis touchez réessayer : rien de ce qui a déjà été copié ne sera renvoyé. Erreur d’origine : %1$s</string>
+    <string name="err_read_only">Impossible d’écrire sur cette clé. Soit son commutateur de protection en écriture est activé, soit elle est formatée en NTFS (qu’Android monte généralement en lecture seule) : reformatez-la en exFAT et elle fonctionnera. Erreur d’origine : %1$s</string>
+    <string name="err_no_write_perm">Le système n’autorise pas l’écriture sur cette clé. Débranchez-la, rebranchez-la et choisissez à nouveau le dossier. Erreur d’origine : %1$s</string>
+    <string name="err_io">Erreur de lecture ou d’écriture sur la clé — le plus souvent un contact mal établi ou un secteur défectueux. Essayez un autre port ou un autre câble. Erreur d’origine : %1$s</string>
+    <string name="err_drive_gone">La clé USB a été débranchée en cours de route. Rebranchez-la et touchez réessayer : rien de ce qui a déjà été copié ne sera renvoyé. Erreur d’origine : %1$s</string>
+    <string name="err_source_gone">Cette photo n’est plus sur le téléphone (elle vient peut-être d’être supprimée). Erreur d’origine : %1$s</string>
+    <string name="err_perm_revoked">Le système a révoqué l’accès à cette clé. Choisissez à nouveau le dossier de la clé USB pour continuer. Erreur d’origine : %1$s</string>
+    <string name="err_cannot_create">Impossible de créer « %1$s » sur la clé USB. En général cela veut dire qu’elle est pleine, protégée en écriture, ou qu’elle a été débranchée — vérifiez puis touchez réessayer.</string>
+    <string name="err_tree_unopenable">Impossible d’ouvrir le dossier de sauvegarde sur la clé USB. Elle a peut-être été débranchée, ou l’autorisation a expiré. Rebranchez-la et, si besoin, choisissez à nouveau le dossier.</string>
+    <string name="err_marker_bad">Impossible de lire le fichier d’identification de la sauvegarde sur cette clé (%1$s). Elle a peut-être été écrite par un autre logiciel, ou le fichier est endommagé.</string>
+    <string name="err_too_many_dupes">Il y a déjà des centaines de copies de « %1$s » sur la clé, la numérotation s’arrête ici.</string>
+    <string name="running_preparing">Préparation en cours…</string>
+    <string name="about_tagline">Outil hors ligne entièrement automatique pour sauvegarder les photos sur une clé USB</string>
+    <string name="about_no_net">PAS de publicité, AUCUNE autorisation Internet requise.</string>
+    <string name="about_no_delete">NE supprime PAS les fichiers de votre téléphone.</string>
+    <string name="about_saved_location">Emplacement de sauvegarde</string>
+    <string name="about_hide_nomedia_title">Masquer les dossiers .nomedia</string>
+    <string name="about_hide_nomedia_detail">Masque les dossiers techniques des applications (recommandé de le laisser activé)</string>
+    <string name="about_export_title">Exporter le rapport d’erreurs</string>
+    <string name="about_export_detail">Exporte le fichier de diagnostic et ouvre la page de retour</string>
+    <string name="about_kofi_title">Soutenir le développeur</string>
+    <string name="about_version">Version %1$s</string>
+</resources>

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 中文。⚠️ 中文没有单复数 ⇒ plurals 只写 other。 -->
+<resources>
+    <string name="step_wait_usb">等待 U 盘</string>
+    <string name="step_usb_found">已插入 U 盘</string>
+    <string name="step_checking">检测</string>
+    <string name="step_verify_set">验证形式</string>
+    <string name="step_read_log">查找 log</string>
+    <string name="step_collect">收集要上传的部分</string>
+    <string name="step_prepared">准备完成</string>
+    <string name="step_await_confirm">等待确认</string>
+
+    <string name="prep_need_usb_grant">还没授权，去授权一次</string>
+    <string name="prep_readonly">只读，写不进去</string>
+    <string name="prep_not_mounted">盘没插上</string>
+    <string name="prep_marker_unreadable">盘上的标识文件读不懂</string>
+    <string name="prep_fresh_drive">全新的盘</string>
+    <string name="prep_set">备份集 %1$s</string>
+    <string name="prep_known_count">已记录 %1$d 条</string>
+    <string name="prep_to_copy">%1$s 要拷</string>
+    <string name="prep_total">共 %1$s</string>
+
+    <string name="idle_no_usb">还没授权 U 盘，点一下去授权</string>
+    <string name="idle_plug_in">插上 U 盘就开始</string>
+    <string name="ready_nothing_selected">还没勾选文件夹</string>
+    <string name="ready_pick_folders">"在下面挑要备份的文件夹　→　"</string>
+    <string name="ready_all_backed_up">已全部备份</string>
+    <string name="ready_confirm_again">再次点击确认</string>
+    <string name="ready_start">开始备份</string>
+    <string name="ready_skip">"已有 %1$s 会跳过　→　"</string>
+    <string name="running_stop">暂停</string>
+    <string name="done_title">备份完成</string>
+    <string name="done_detail">已拷 %1$d 跳过 %2$d 失败 %3$d · 点一下重新检查</string>
+    <string name="failed_title">出问题了</string>
+    <string name="failed_detail">%1$s · 点一下重试</string>
+    <string name="resume_title">上次没做完，点一下继续</string>
+    <string name="resume_detail">已完成 %1$d/%2$d，数据是完好的</string>
+    <string name="perm_partial_title">只授权了部分照片</string>
+    <string name="perm_partial_detail">其余的备份不到 · 点一下改成「全部允许」</string>
+    <string name="perm_none_title">需要读取照片的权限</string>
+    <string name="perm_none_detail">没有它一张也读不到 · 点一下允许</string>
+
+    <plurals name="n_photos">
+        <item quantity="other">%d 张照片</item>
+    </plurals>
+    <plurals name="n_videos">
+        <item quantity="other">%d 个视频</item>
+    </plurals>
+    <string name="media_join">%1$s · %2$s</string>
+
+    <string name="notif_channel">备份进度</string>
+    <string name="notif_channel_desc">显示备份到 U 盘的进度</string>
+    <string name="notif_title">正在备份到 U 盘</string>
+    <string name="notif_preparing">正在准备…</string>
+    <string name="notif_progress">%1$d / %2$d  %3$s</string>
+    <string name="notif_total">共 %1$d 个文件</string>
+    <string name="action_cancel">暂停</string>
+
+    <string name="err_no_usb_grant">没有 U 盘授权</string>
+    <string name="err_interrupted">上次备份被系统中断了。打开 app 点「备份到 U 盘」即可从断点续上（已完成的不会重传）</string>
+    <string name="err_no_reason">任务失败，没拿到原因</string>
+    <string name="err_too_big">这个文件 %1$s 超过 4 GB —— 如果 U 盘是 FAT32，单个文件最多 4 GB，写不进去（格式化成 exFAT 就没这个限制）。原始错误：%2$s</string>
+    <string name="folders_title">备份这些文件夹</string>
+    <string name="select_all">全选</string>
+    <string name="select_none">全不选</string>
+    <string name="folder_dialog_title">备份此文件夹？</string>
+    <string name="folder_first_n">前 %1$d 项 · 共 %2$s</string>
+    <string name="action_close">关闭</string>
+    <string name="folder_stop_backup">取消备份此文件夹</string>
+    <string name="folder_do_backup">备份此文件夹</string>
+    <string name="detent_list">看列表</string>
+    <string name="detent_normal">常态</string>
+    <string name="card_top">上卡</string>
+    <string name="card_bottom">下卡</string>
+    <string name="divider_desc">上下卡的分隔条：推它或点它换档，当前 %1$s</string>
+    <string name="dots_desc">%1$s在第 %2$d 页，共 %3$d 页</string>
+    <string name="log_empty">还没有备份过</string>
+    <string name="log_failed_no_detail">有 %1$d 件失败；这次备份跑在「补失败登记」之前，没有明细</string>
+    <string name="log_truncated">只列了最近 %1$d 条</string>
+    <string name="log_nothing_new">这次没有新拷的文件</string>
+    <string name="log_copied">拷 %1$d</string>
+    <string name="log_incl">（含 %1$s）</string>
+    <string name="log_skipped">跳过 %1$d</string>
+    <string name="log_failed">失败 %1$d</string>
+    <string name="log_unfinished">没跑完</string>
+    <string name="log_already_there">已有</string>
+    <string name="log_video_prefix">"视频 "</string>
+    <string name="dur_sec">%1$d 秒</string>
+    <string name="dur_min_sec">%1$d 分 %2$d 秒</string>
+    <string name="dur_hour_min">%1$d 小时 %2$d 分</string>
+    <string name="prep_imported">认出盘上已有 %1$d 条</string>
+    <string name="acc_ok">已连接：%1$s</string>
+    <string name="acc_read_only">「%1$s」现在只能读、写不进去。要么盘身上的写保护开关拨着了，要么它是 NTFS 格式（安卓多半只能只读挂载）—— 换成 exFAT 就能写。</string>
+    <string name="acc_not_mounted">「%1$s」没插上。授权还留着，插回去就能接着来。</string>
+    <string name="err_disk_full">U 盘满了，写不下了。腾出空间再点重试，已经拷好的不会重来。原始错误：%1$s</string>
+    <string name="err_read_only">写不进这块盘。要么盘身上的写保护开关拨着了，要么它是 NTFS 格式（安卓多半只能只读挂载）—— 换成 exFAT 就能写。原始错误：%1$s</string>
+    <string name="err_no_write_perm">系统不让往这块盘写。拔下再插上、重新选一次目录试试。原始错误：%1$s</string>
+    <string name="err_io">读写这块盘时出错，多半是没插稳或者盘本身有坏块。换个口、换根线再试。原始错误：%1$s</string>
+    <string name="err_drive_gone">U 盘中途断开了。插回去点重试，已经拷好的不会重来。原始错误：%1$s</string>
+    <string name="err_source_gone">这张照片已经不在手机上了（可能刚被删掉）。原始错误：%1$s</string>
+    <string name="err_perm_revoked">对这块盘的授权被系统收回了。重新选一次 U 盘目录就能继续。原始错误：%1$s</string>
+    <string name="err_cannot_create">在 U 盘上建不了「%1$s」。常见原因是盘满了、盘写保护、或者中途被拔掉 —— 检查一下再点重试。</string>
+    <string name="err_tree_unopenable">打不开 U 盘上的备份目录。盘可能被拔掉了，或者授权失效了。插回去，必要时重新选一次目录。</string>
+    <string name="err_marker_bad">读不懂这块盘上的备份标识文件（%1$s）。这块盘可能是别的软件写的，或者文件坏了。</string>
+    <string name="err_too_many_dupes">盘上已经有好几百个「%1$s」的同名副本了，不再往下编号。</string>
+    <string name="running_preparing">正在准备…</string>
+    <string name="about_tagline">全自动离线工具，把照片备份进 U 盘</string>
+    <string name="about_no_net">无广告，无需任何网络权限。</string>
+    <string name="about_no_delete">绝不删除你手机里的文件。</string>
+    <string name="about_saved_location">保存位置</string>
+    <string name="about_hide_nomedia_title">默认隐藏 .nomedia 文件夹</string>
+    <string name="about_hide_nomedia_detail">隐藏应用杂项文件夹（建议保留默认）</string>
+    <string name="about_export_title">导出错误目录</string>
+    <string name="about_export_detail">导出诊断包，并打开反馈页</string>
+    <string name="about_kofi_title">打赏开发者</string>
+    <string name="about_version">版本 %1$s</string>
+</resources>

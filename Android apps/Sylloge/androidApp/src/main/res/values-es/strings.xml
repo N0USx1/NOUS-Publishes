@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Español。⚠️ 撇号一律写成 ’（西语里少见，但一律这么写最安全）。 -->
+<resources>
+    <string name="step_wait_usb">Esperando la memoria USB</string>
+    <string name="step_usb_found">Memoria USB conectada</string>
+    <string name="step_checking">Comprobando</string>
+    <string name="step_verify_set">Verificando la copia</string>
+    <string name="step_read_log">Leyendo el registro</string>
+    <string name="step_collect">Reuniendo lo que hay que copiar</string>
+    <string name="step_prepared">Listo</string>
+    <string name="step_await_confirm">Esperando confirmación</string>
+
+    <string name="prep_need_usb_grant">Aún sin autorizar — toca para hacerlo</string>
+    <string name="prep_readonly">Solo lectura — no se puede escribir</string>
+    <string name="prep_not_mounted">Memoria no conectada</string>
+    <string name="prep_marker_unreadable">No se puede leer el archivo de identificación</string>
+    <string name="prep_fresh_drive">Memoria nueva</string>
+    <string name="prep_set">Copia %1$s</string>
+    <string name="prep_known_count">%1$d ya registrados</string>
+    <string name="prep_to_copy">%1$s por copiar</string>
+    <string name="prep_total">%1$s en total</string>
+
+    <string name="idle_no_usb">Ninguna memoria USB autorizada — toca para hacerlo</string>
+    <string name="idle_plug_in">Conecta una memoria USB para empezar</string>
+    <string name="ready_nothing_selected">No has elegido ninguna carpeta</string>
+    <string name="ready_pick_folders">"Elige las carpetas de abajo → "</string>
+    <string name="ready_all_backed_up">Todo está respaldado</string>
+    <string name="ready_confirm_again">Toca otra vez para confirmar</string>
+    <string name="ready_start">Iniciar la copia</string>
+    <string name="ready_skip">"%1$s ya están, se omitirán → "</string>
+    <string name="running_stop">Pausar</string>
+    <string name="done_title">Copia completada</string>
+    <string name="done_detail">Copiados %1$d · Omitidos %2$d · Fallidos %3$d · Toca para revisar</string>
+    <string name="failed_title">Algo salió mal</string>
+    <string name="failed_detail">%1$s · Toca para reintentar</string>
+    <string name="resume_title">La última copia no terminó — toca para continuar</string>
+    <string name="resume_detail">%1$d de %2$d hechos — tus datos están intactos</string>
+    <string name="perm_partial_title">Solo has compartido algunas fotos</string>
+    <string name="perm_partial_detail">Las demás no se pueden respaldar · Toca y elige «Permitir todo»</string>
+    <string name="perm_none_title">Hace falta acceso a las fotos</string>
+    <string name="perm_none_detail">Sin él no se puede leer ni una foto · Toca para permitir</string>
+
+    <plurals name="n_photos">
+        <item quantity="one">%d foto</item>
+        <item quantity="other">%d fotos</item>
+    </plurals>
+    <plurals name="n_videos">
+        <item quantity="one">%d vídeo</item>
+        <item quantity="other">%d vídeos</item>
+    </plurals>
+    <string name="media_join">%1$s · %2$s</string>
+
+    <string name="notif_channel">Progreso de la copia</string>
+    <string name="notif_channel_desc">Muestra cómo va la copia a la memoria USB</string>
+    <string name="notif_title">Copiando a la memoria USB</string>
+    <string name="notif_preparing">Preparando…</string>
+    <string name="notif_progress">%1$d / %2$d  %3$s</string>
+    <string name="notif_total">%1$d archivos en total</string>
+    <string name="action_cancel">Pausar</string>
+
+    <string name="err_no_usb_grant">No hay ninguna memoria USB autorizada</string>
+    <string name="err_interrupted">El sistema interrumpió la última copia. Abre la app y toca «Copiar a la memoria USB» para retomarla donde se quedó: nada de lo ya copiado se enviará otra vez.</string>
+    <string name="err_no_reason">La tarea falló sin indicar el motivo</string>
+    <string name="err_too_big">El archivo %1$s supera los 4 GB: una memoria en FAT32 no admite un archivo tan grande (si la formateas en exFAT, el límite desaparece). Error original: %2$s</string>
+    <string name="folders_title">Copiar estas carpetas</string>
+    <string name="select_all">Seleccionar todo</string>
+    <string name="select_none">Quitar todo</string>
+    <string name="folder_dialog_title">¿Copiar esta carpeta?</string>
+    <string name="folder_first_n">Primeros %1$d · %2$s en total</string>
+    <string name="action_close">Cerrar</string>
+    <string name="folder_stop_backup">No copiar esta carpeta</string>
+    <string name="folder_do_backup">Copiar esta carpeta</string>
+    <string name="detent_list">vista de lista</string>
+    <string name="detent_normal">normal</string>
+    <string name="card_top">Tarjeta superior</string>
+    <string name="card_bottom">Tarjeta inferior</string>
+    <string name="divider_desc">Separador entre las dos tarjetas: arrástralo o tócalo para cambiar la disposición. Ahora: %1$s</string>
+    <string name="dots_desc">%1$s: página %2$d de %3$d</string>
+    <string name="log_empty">Todavía no hay copias</string>
+    <string name="log_failed_no_detail">%1$d fallidos: esta copia es anterior al registro de errores, así que no hay detalles</string>
+    <string name="log_truncated">Solo se muestran los %1$d más recientes</string>
+    <string name="log_nothing_new">Esta vez no se copió nada nuevo</string>
+    <string name="log_copied">Copiados %1$d</string>
+    <string name="log_incl">(incluidos %1$s)</string>
+    <string name="log_skipped">Omitidos %1$d</string>
+    <string name="log_failed">Fallidos %1$d</string>
+    <string name="log_unfinished">No terminó</string>
+    <string name="log_already_there">Ya está</string>
+    <string name="log_video_prefix">"Vídeo "</string>
+    <string name="dur_sec">%1$d s</string>
+    <string name="dur_min_sec">%1$d min %2$d s</string>
+    <string name="dur_hour_min">%1$d h %2$d min</string>
+    <string name="prep_imported">Reconocidos %1$d que ya están en la memoria</string>
+    <string name="acc_ok">Conectada: %1$s</string>
+    <string name="acc_read_only">«%1$s» solo se puede leer, no escribir. O tiene activado el interruptor de protección contra escritura, o está formateada en NTFS (que Android suele montar en solo lectura): formatéala en exFAT y funcionará.</string>
+    <string name="acc_not_mounted">«%1$s» no está conectada. El permiso sigue vigente: vuelve a conectarla y podrás continuar.</string>
+    <string name="err_disk_full">La memoria USB está llena. Libera espacio y toca reintentar: nada de lo ya copiado se enviará otra vez. Error original: %1$s</string>
+    <string name="err_read_only">No se puede escribir en esta memoria. O tiene activado el interruptor de protección contra escritura, o está formateada en NTFS (que Android suele montar en solo lectura): formatéala en exFAT y funcionará. Error original: %1$s</string>
+    <string name="err_no_write_perm">El sistema no permite escribir en esta memoria. Desconéctala, vuelve a conectarla y elige la carpeta otra vez. Error original: %1$s</string>
+    <string name="err_io">Error al leer o escribir en la memoria: suele ser una conexión floja o un sector dañado. Prueba con otro puerto u otro cable. Error original: %1$s</string>
+    <string name="err_drive_gone">La memoria USB se desconectó a mitad del proceso. Vuelve a conectarla y toca reintentar: nada de lo ya copiado se enviará otra vez. Error original: %1$s</string>
+    <string name="err_source_gone">Esa foto ya no está en el teléfono (puede que la acaben de borrar). Error original: %1$s</string>
+    <string name="err_perm_revoked">El sistema revocó el acceso a esta memoria. Elige de nuevo la carpeta de la memoria USB para continuar. Error original: %1$s</string>
+    <string name="err_cannot_create">No se pudo crear «%1$s» en la memoria USB. Normalmente significa que está llena, protegida contra escritura o que se desconectó: compruébalo y toca reintentar.</string>
+    <string name="err_tree_unopenable">No se pudo abrir la carpeta de copia en la memoria USB. Puede que se haya desconectado o que el permiso haya caducado. Vuelve a conectarla y, si hace falta, elige la carpeta otra vez.</string>
+    <string name="err_marker_bad">No se pudo leer el archivo de identificación de la copia en esta memoria (%1$s). Puede que la haya escrito otro programa o que el archivo esté dañado.</string>
+    <string name="err_too_many_dupes">Ya hay cientos de copias de «%1$s» en la memoria, así que la numeración se detiene aquí.</string>
+    <string name="running_preparing">Preparando…</string>
+    <string name="about_tagline">Herramienta sin conexión totalmente automática para copiar las fotos a una memoria USB</string>
+    <string name="about_no_net">SIN anuncios, SIN permiso de Internet.</string>
+    <string name="about_no_delete">NO borra los archivos de tu teléfono.</string>
+    <string name="about_saved_location">Ubicación de guardado</string>
+    <string name="about_hide_nomedia_title">Ocultar las carpetas .nomedia</string>
+    <string name="about_hide_nomedia_detail">Oculta las carpetas de datos de las apps (se recomienda dejarlo activado)</string>
+    <string name="about_export_title">Exportar el informe de errores</string>
+    <string name="about_export_detail">Exporta el archivo de diagnóstico y abre la página de comentarios</string>
+    <string name="about_kofi_title">Apoya al desarrollador</string>
+    <string name="about_version">Versión %1$s</string>
+</resources>

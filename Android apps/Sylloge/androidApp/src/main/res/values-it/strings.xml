@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Italiano. ⚠️ 撇号一律写成 ’（aapt 不接受裸的 '）。 -->
+<resources>
+    <string name="step_wait_usb">In attesa della chiavetta USB</string>
+    <string name="step_usb_found">Chiavetta USB collegata</string>
+    <string name="step_checking">Controllo</string>
+    <string name="step_verify_set">Verifica del backup</string>
+    <string name="step_read_log">Lettura del registro</string>
+    <string name="step_collect">Raccolta dei file da copiare</string>
+    <string name="step_prepared">Pronto</string>
+    <string name="step_await_confirm">In attesa di conferma</string>
+
+    <string name="prep_need_usb_grant">Non ancora autorizzata — tocca per farlo</string>
+    <string name="prep_readonly">Sola lettura — impossibile scrivere</string>
+    <string name="prep_not_mounted">Chiavetta non collegata</string>
+    <string name="prep_marker_unreadable">Impossibile leggere il file di identificazione</string>
+    <string name="prep_fresh_drive">Chiavetta nuova</string>
+    <string name="prep_set">Backup %1$s</string>
+    <string name="prep_known_count">%1$d già registrati</string>
+    <string name="prep_to_copy">%1$s da copiare</string>
+    <string name="prep_total">%1$s in totale</string>
+
+    <string name="idle_no_usb">Nessuna chiavetta autorizzata — tocca per farlo</string>
+    <string name="idle_plug_in">Collega una chiavetta USB per iniziare</string>
+    <string name="ready_nothing_selected">Nessuna cartella selezionata</string>
+    <string name="ready_pick_folders">"Scegli le cartelle qui sotto → "</string>
+    <string name="ready_all_backed_up">Tutto è già salvato</string>
+    <string name="ready_confirm_again">Tocca di nuovo per confermare</string>
+    <string name="ready_start">Avvia il backup</string>
+    <string name="ready_skip">"%1$s già presenti, verranno saltati → "</string>
+    <string name="running_stop">Sospendi</string>
+    <string name="done_title">Backup completato</string>
+    <string name="done_detail">Copiati %1$d · Saltati %2$d · Falliti %3$d · Tocca per ricontrollare</string>
+    <string name="failed_title">Qualcosa è andato storto</string>
+    <string name="failed_detail">%1$s · Tocca per riprovare</string>
+    <string name="resume_title">L’ultimo backup non è finito — tocca per continuare</string>
+    <string name="resume_detail">%1$d di %2$d completati — i dati sono intatti</string>
+    <string name="perm_partial_title">Hai condiviso solo alcune foto</string>
+    <string name="perm_partial_detail">Le altre non possono essere salvate · Tocca e scegli “Consenti tutto”</string>
+    <string name="perm_none_title">Serve l’accesso alle foto</string>
+    <string name="perm_none_detail">Senza non si può leggere nemmeno una foto · Tocca per consentire</string>
+
+    <plurals name="n_photos">
+        <item quantity="one">%d foto</item>
+        <item quantity="other">%d foto</item>
+    </plurals>
+    <plurals name="n_videos">
+        <item quantity="one">%d video</item>
+        <item quantity="other">%d video</item>
+    </plurals>
+    <string name="media_join">%1$s · %2$s</string>
+
+    <string name="notif_channel">Avanzamento del backup</string>
+    <string name="notif_channel_desc">Mostra come procede il backup sulla chiavetta USB</string>
+    <string name="notif_title">Backup sulla chiavetta USB in corso</string>
+    <string name="notif_preparing">Preparazione…</string>
+    <string name="notif_progress">%1$d / %2$d  %3$s</string>
+    <string name="notif_total">%1$d file in totale</string>
+    <string name="action_cancel">Sospendi</string>
+
+    <string name="err_no_usb_grant">Nessuna chiavetta USB autorizzata</string>
+    <string name="err_interrupted">L’ultimo backup è stato interrotto dal sistema. Apri l’app e tocca “Backup sulla chiavetta USB” per riprendere da dove si era fermato: nulla di già copiato verrà inviato di nuovo.</string>
+    <string name="err_no_reason">Operazione fallita senza motivo indicato</string>
+    <string name="err_too_big">Il file %1$s supera i 4 GB: una chiavetta FAT32 non può contenere un file così grande (formattandola in exFAT il limite sparisce). Errore originale: %2$s</string>
+    <string name="folders_title">Salva queste cartelle</string>
+    <string name="select_all">Seleziona tutto</string>
+    <string name="select_none">Deseleziona tutto</string>
+    <string name="folder_dialog_title">Salvare questa cartella?</string>
+    <string name="folder_first_n">Prime %1$d · %2$s in totale</string>
+    <string name="action_close">Chiudi</string>
+    <string name="folder_stop_backup">Non salvare questa cartella</string>
+    <string name="folder_do_backup">Salva questa cartella</string>
+    <string name="detent_list">vista elenco</string>
+    <string name="detent_normal">normale</string>
+    <string name="card_top">Scheda superiore</string>
+    <string name="card_bottom">Scheda inferiore</string>
+    <string name="divider_desc">Separatore fra le due schede — trascinalo o toccalo per cambiare disposizione. Ora: %1$s</string>
+    <string name="dots_desc">%1$s: pagina %2$d di %3$d</string>
+    <string name="log_empty">Nessun backup finora</string>
+    <string name="log_failed_no_detail">%1$d non riusciti — questo backup è precedente alla registrazione degli errori, quindi non ci sono dettagli</string>
+    <string name="log_truncated">Mostrati solo i %1$d più recenti</string>
+    <string name="log_nothing_new">Questa volta non è stato copiato nulla di nuovo</string>
+    <string name="log_copied">Copiati %1$d</string>
+    <string name="log_incl">(inclusi %1$s)</string>
+    <string name="log_skipped">Saltati %1$d</string>
+    <string name="log_failed">Falliti %1$d</string>
+    <string name="log_unfinished">Non completato</string>
+    <string name="log_already_there">Già presente</string>
+    <string name="log_video_prefix">"Video "</string>
+    <string name="dur_sec">%1$d s</string>
+    <string name="dur_min_sec">%1$d min %2$d s</string>
+    <string name="dur_hour_min">%1$d h %2$d min</string>
+    <string name="prep_imported">Riconosciuti %1$d già presenti sulla chiavetta</string>
+    <string name="acc_ok">Collegata: %1$s</string>
+    <string name="acc_read_only">«%1$s» si può solo leggere, non scrivere. O l’interruttore di protezione da scrittura è attivo, oppure è formattata in NTFS (che Android di solito monta in sola lettura): riformattala in exFAT e funzionerà.</string>
+    <string name="acc_not_mounted">«%1$s» non è collegata. L’autorizzazione è ancora valida: ricollegala e potrai riprendere.</string>
+    <string name="err_disk_full">La chiavetta USB è piena. Libera spazio e tocca riprova: nulla di già copiato verrà inviato di nuovo. Errore originale: %1$s</string>
+    <string name="err_read_only">Impossibile scrivere su questa chiavetta. O l’interruttore di protezione da scrittura è attivo, oppure è formattata in NTFS (che Android di solito monta in sola lettura): riformattala in exFAT e funzionerà. Errore originale: %1$s</string>
+    <string name="err_no_write_perm">Il sistema non consente di scrivere su questa chiavetta. Scollegala, ricollegala e scegli di nuovo la cartella. Errore originale: %1$s</string>
+    <string name="err_io">Errore durante la lettura o la scrittura sulla chiavetta: di solito è un contatto allentato o un settore danneggiato. Prova un’altra porta o un altro cavo. Errore originale: %1$s</string>
+    <string name="err_drive_gone">La chiavetta USB si è scollegata a metà. Ricollegala e tocca riprova: nulla di già copiato verrà inviato di nuovo. Errore originale: %1$s</string>
+    <string name="err_source_gone">Questa foto non è più sul telefono (forse è stata appena eliminata). Errore originale: %1$s</string>
+    <string name="err_perm_revoked">Il sistema ha revocato l’accesso a questa chiavetta. Scegli di nuovo la cartella sulla chiavetta per riprendere. Errore originale: %1$s</string>
+    <string name="err_cannot_create">Impossibile creare «%1$s» sulla chiavetta USB. Di solito significa che è piena, protetta da scrittura o è stata scollegata: controlla e tocca riprova.</string>
+    <string name="err_tree_unopenable">Impossibile aprire la cartella di backup sulla chiavetta USB. Forse è stata scollegata, o l’autorizzazione è scaduta. Ricollegala e, se serve, scegli di nuovo la cartella.</string>
+    <string name="err_marker_bad">Impossibile leggere il file di identificazione del backup su questa chiavetta (%1$s). Forse è stata scritta da un altro programma, o il file è danneggiato.</string>
+    <string name="err_too_many_dupes">Sulla chiavetta ci sono già centinaia di copie di «%1$s», quindi la numerazione si ferma qui.</string>
+    <string name="running_preparing">Preparazione in corso…</string>
+    <string name="about_tagline">Strumento offline completamente automatico per salvare le foto su una chiavetta USB</string>
+    <string name="about_no_net">NIENTE pubblicità, NESSUNA autorizzazione Internet richiesta.</string>
+    <string name="about_no_delete">NON cancella i file del tuo telefono.</string>
+    <string name="about_saved_location">Posizione di salvataggio</string>
+    <string name="about_hide_nomedia_title">Nascondi le cartelle .nomedia</string>
+    <string name="about_hide_nomedia_detail">Nasconde le cartelle di servizio delle app (consigliato lasciarlo attivo)</string>
+    <string name="about_export_title">Esporta il rapporto errori</string>
+    <string name="about_export_detail">Esporta il file di diagnostica e apre la pagina di feedback</string>
+    <string name="about_kofi_title">Sostieni lo sviluppatore</string>
+    <string name="about_version">Versione %1$s</string>
+</resources>

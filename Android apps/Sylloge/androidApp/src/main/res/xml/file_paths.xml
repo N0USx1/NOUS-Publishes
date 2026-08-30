@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  诊断包分享用。⚠️ 只暴露 cache 里那一个子目录，⛔ 不要 <root-path> ——
+  那等于把整个 app 私有目录（含 catalog.db）都开给别人。
+-->
+<paths>
+    <cache-path name="diagnostic" path="diagnostic/" />
+</paths>
