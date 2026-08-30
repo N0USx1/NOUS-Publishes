@@ -5,8 +5,8 @@ Fully automated offline tool to backup photos from an Android phone into a USB d
 - **NO ads, NO internet permission needed.** The app cannot go online at all — the build
   fails if any network permission sneaks into the manifest, and you can verify the
   installed app yourself in Android's app info → permissions.
-- **DOES NOT delete your phone files.** It only ever adds to the drive: same-name files
-  with different content are saved as `~2` copies, never overwritten.
+- **DOES NOT delete your phone files.** Same-name files with different content are
+  saved as `~2` copies.
 - Incremental: files already on the drive are skipped; interrupted runs resume where
   they left off, nothing is sent twice.
 - The drive stays self-describing: photos keep their original folder structure, plus a
@@ -19,7 +19,7 @@ sources). Requires Android 11+.
 
 On first run the app asks for **All files access** (`MANAGE_EXTERNAL_STORAGE`) — this is
 what lets it see every photo folder, including ones hidden from the system gallery.
-It has no network permission, so nothing it reads can leave the phone.
+
 
 > The bundled APK is signed with a development key. A Play Store release with a proper
 > signing key is planned.
