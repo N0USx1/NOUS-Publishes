@@ -44,7 +44,12 @@ class BackupWorker(
         // ★ 教训：**默认值是给不知情的调用方用的** —— 它必须是"正确行为"，
         //   ⛔ 不能是"我调试时方便的行为"。
         val limit = inputData.getInt(KEY_LIMIT, 0)
-        val throttle = inputData.getLong(KEY_THROTTLE, 0L)
+        // ★ 测试通道（限速/指定文件夹）在 **release 里焊死**（2026-08-30，发布前审计）：
+        //   ⛔ 不能只靠"生产路径不会传" —— 「限速没摘」那次事故就是这类通道漏出去的。
+        //   ⚠️ 不用 BuildConfig（buildConfig 没开），用 FLAG_DEBUGGABLE 实测本包。
+        val isDebuggable =
+            (ctx.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val throttle = if (isDebuggable) inputData.getLong(KEY_THROTTLE, 0L) else 0L
 
         val db = CatalogDb(ctx)
         val source = photoSourceOf(ctx)
@@ -76,7 +81,7 @@ class BackupWorker(
             // = **全量拷**，和卡上的「4205 张」对不上（2026-08-25 抓到，没上过真机）。
             // ★ 测试通道（只有 debug 面板会传）：**显式指定文件夹**，绕开用户的勾选。
             //   ⛔ 生产路径永远走 FolderFilter —— 口径必须和上卡同源。
-            val override = inputData.getStringArray(KEY_FOLDERS)
+            val override = if (isDebuggable) inputData.getStringArray(KEY_FOLDERS) else null
             val allowed = if (override != null && override.isNotEmpty()) override.toSet()
                 else FolderFilter.allowed(db, source)
             if (override != null) Trace.w("⚠️ 测试通道：只跑指定文件夹 " + allowed)
